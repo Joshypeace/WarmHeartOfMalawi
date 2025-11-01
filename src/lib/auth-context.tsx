@@ -1,103 +1,88 @@
-"use client"
+// src/lib/auth-context.tsx
+"use client";
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-
-type UserRole = "customer" | "vendor" | "admin" | "regional_admin"
+import { createContext, useContext, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { UserRole } from "@prisma/client";
 
 interface User {
-  id: string
-  name: string
-  email: string
-  role: UserRole
-  avatar?: string
-  businessName?: string
-  businessDescription?: string
-  isApproved?: boolean
-  district?: string
-  city?: string
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  district?: string | null;
+  vendorShop?: any;
 }
 
 interface AuthContextType {
-  user: User | null
-  login: (email: string, password: string, role: UserRole) => Promise<void>
-  logout: () => void
-  isLoading: boolean
-  register: (
-    email: string,
-    password: string,
-    name: string,
-    role: UserRole,
-    businessInfo?: { businessName: string; businessDescription: string; district?: string; city?: string },
-  ) => Promise<void>
+  user: User | null;
+  login: (email: string, password: string, role: string) => Promise<void>;
+  logout: () => Promise<void>;
+  isLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem("wahea_user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
+    if (session?.user) {
+      setUser({
+        id: session.user.id,
+        email: session.user.email!,
+        firstName: session.user.firstName,
+        lastName: session.user.lastName,
+        role: session.user.role,
+        district: session.user.district,
+        vendorShop: session.user.vendorShop,
+      });
+    } else {
+      setUser(null);
     }
-    setIsLoading(false)
-  }, [])
+  }, [session]);
 
-  const login = async (email: string, password: string, role: UserRole) => {
-    // Mock login - in production, this would call an API
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: email.split("@")[0],
+  const login = async (email: string, password: string, role: string) => {
+    const result = await signIn("credentials", {
       email,
+      password,
       role,
-      avatar: `/placeholder.svg?height=40&width=40&query=user+avatar`,
-      isApproved: role === "vendor" ? true : undefined,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      throw new Error(result.error);
     }
+  };
 
-    setUser(mockUser)
-    localStorage.setItem("wahea_user", JSON.stringify(mockUser))
-  }
+  const logout = async () => {
+    await signOut({ redirect: false });
+    setUser(null);
+    router.push("/");
+  };
 
-  const register = async (
-    email: string,
-    password: string,
-    name: string,
-    role: UserRole,
-    businessInfo?: { businessName: string; businessDescription: string; district?: string; city?: string },
-  ) => {
-    // Mock registration - in production, this would call an API
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name,
-      email,
-      role,
-      avatar: `/placeholder.svg?height=40&width=40&query=user+avatar`,
-      businessName: businessInfo?.businessName,
-      businessDescription: businessInfo?.businessDescription,
-      isApproved: role === "vendor" ? false : undefined,
-      district: businessInfo?.district,
-      city: businessInfo?.city,
-    }
-
-    setUser(mockUser)
-    localStorage.setItem("wahea_user", JSON.stringify(mockUser))
-  }
-
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem("wahea_user")
-  }
-
-  return <AuthContext.Provider value={{ user, login, logout, isLoading, register }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        isLoading: status === "loading",
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context
+  return context;
 }

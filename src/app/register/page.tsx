@@ -44,6 +44,7 @@ export default function RegisterPage() {
   const [businessName, setBusinessName] = useState("")
   const [businessDescription, setBusinessDescription] = useState("")
   const [district, setDistrict] = useState("")
+  const [phone, setPhone] = useState("")
   const [city, setCity] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState<"customer" | "vendor" | "admin" | "regional_admin">("customer")
@@ -51,94 +52,65 @@ export default function RegisterPage() {
   const router = useRouter()
   const { toast } = useToast()
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // In your register component, replace the handleRegister function:
+const handleRegister = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (password !== confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: "Please make sure your passwords match.",
-        variant: "destructive",
-      })
-      return
+  // ... validation code ...
+
+  setIsLoading(true);
+
+  try {
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        firstName: name.split(' ')[0],
+        lastName: name.split(' ').slice(1).join(' ') || name.split(' ')[0],
+        phone,
+        district,
+        role: selectedRole.toUpperCase(),
+        businessName: selectedRole === 'vendor' ? businessName : undefined,
+        businessDescription: selectedRole === 'vendor' ? businessDescription : undefined,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Registration failed');
     }
 
-    if (password.length < 8) {
-      toast({
-        title: "Password too short",
-        description: "Password must be at least 8 characters long.",
-        variant: "destructive",
-      })
-      return
-    }
+    // After successful registration, log the user in
+    await login(email, password, selectedRole);
 
-    if ((selectedRole === "customer" || selectedRole === "vendor") && !district) {
-      toast({
-        title: "District required",
-        description: "Please select your district.",
-        variant: "destructive",
-      })
-      return
-    }
+    toast({
+      title: "Account created!",
+      description:
+        selectedRole === "vendor"
+          ? "Your vendor account is pending approval."
+          : selectedRole === "regional_admin"
+            ? `Regional admin account created for ${district} district.`
+            : selectedRole === "admin"
+              ? "Super admin account created."
+              : "Welcome to WaHeA! Start shopping now.",
+    });
 
-    if ((selectedRole === "customer" || selectedRole === "vendor") && !city) {
-      toast({
-        title: "City required",
-        description: "Please enter your city or town.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (selectedRole === "regional_admin" && !district) {
-      toast({
-        title: "District required",
-        description: "Please select the district you will manage.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsLoading(true)
-
-    try {
-      // Mock registration - in production, this would call an API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      await login(email, password, selectedRole)
-
-      toast({
-        title: "Account created!",
-        description:
-          selectedRole === "vendor"
-            ? "Your vendor account is pending approval."
-            : selectedRole === "regional_admin"
-              ? `Regional admin account created for ${district} district.`
-              : selectedRole === "admin"
-                ? "Super admin account created."
-                : "Welcome to WaHeA! Start shopping now.",
-      })
-
-      // Redirect based on role
-      if (selectedRole === "vendor") {
-        router.push("/vendor/dashboard")
-      } else if (selectedRole === "admin") {
-        router.push("/admin/dashboard")
-      } else if (selectedRole === "regional_admin") {
-        router.push("/regional-admin/dashboard")
-      } else {
-        router.push("/shop")
-      }
-    } catch (error) {
-      toast({
-        title: "Registration failed",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
+    // ... redirect code ...
+  } catch (error: any) {
+    toast({
+      title: "Registration failed",
+      description: error.message || "Something went wrong. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoading(false);
   }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background p-4">
