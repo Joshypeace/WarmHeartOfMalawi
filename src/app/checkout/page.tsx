@@ -60,7 +60,7 @@ export default function CheckoutPage() {
   const finalTotal = total + shippingCost
 
   const [formData, setFormData] = useState({
-    fullName: user?.name || "",
+    fullName: user?.firstName || "",
     email: user?.email || "",
     phone: "",
     address: "",

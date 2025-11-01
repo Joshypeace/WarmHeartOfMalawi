@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { mockOrders } from "@/lib/mock-data"
-import { ProtectedRoute } from "@/components/protected-route"
+import  ProtectedRoute  from "@/components/protected-route"
 import Link from "next/link"
 
 const statusConfig = {

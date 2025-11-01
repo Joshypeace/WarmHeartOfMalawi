@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ProtectedRoute } from "@/components/protected-route"
+import  ProtectedRoute  from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 
 const categories = ["Crafts", "Food", "Textiles", "Art", "Jewelry"]

@@ -3,7 +3,7 @@
 import { Package, ShoppingCart, DollarSign, TrendingUp, Plus } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ProtectedRoute } from "@/components/protected-route"
+import  ProtectedRoute  from "@/components/protected-route"
 import Link from "next/link"
 import { mockProducts, mockOrders } from "@/lib/mock-data"
 import { useAuth } from "@/lib/auth-context"
@@ -50,7 +50,7 @@ function VendorDashboardContent() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">Vendor Dashboard</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Welcome back, {user?.name}</p>
+            <p className="text-sm md:text-base text-muted-foreground">Welcome back, {user?.firstName}</p>
           </div>
           <Button asChild size="lg" className="w-full sm:w-auto">
             <Link href="/vendor/products/new">

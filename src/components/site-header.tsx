@@ -34,7 +34,7 @@ export function SiteHeader() {
 
   const getDashboardLink = () => {
     if (!user) return "/login"
-    switch (user.role) {
+    switch (user.role as string) {
       case "vendor":
         return "/vendor/dashboard"
       case "admin":
@@ -143,7 +143,7 @@ export function SiteHeader() {
               <DropdownMenuContent align="end" className="w-64 p-2">
                 <DropdownMenuLabel className="p-3">
                   <div className="flex flex-col gap-2">
-                    <p className="text-sm font-semibold truncate">{user.name}</p>
+                    <p className="text-sm font-semibold truncate">{user.firstName}</p>
                     <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                     <Badge
                       variant="secondary"

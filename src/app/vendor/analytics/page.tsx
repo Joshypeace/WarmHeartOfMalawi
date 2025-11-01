@@ -2,7 +2,7 @@
 
 import { TrendingUp, DollarSign, ShoppingCart, Package } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ProtectedRoute } from "@/components/protected-route"
+import  ProtectedRoute from "@/components/protected-route"
 import { mockOrders, mockProducts } from "@/lib/mock-data"
 
 function VendorAnalyticsContent() {

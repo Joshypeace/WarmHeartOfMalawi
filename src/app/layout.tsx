@@ -7,6 +7,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { CartProvider } from "@/lib/cart-context"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
+import { SessionProvider } from "@/components/session-provider" 
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -25,14 +26,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} font-sans antialiased`}>
-        <AuthProvider>
-          <CartProvider>
-            <SiteHeader />
-            <main className="min-h-screen">{children}</main>
-            <SiteFooter />
-            <Toaster />
-          </CartProvider>
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>
+            <CartProvider>
+              <SiteHeader />
+          
+                <main className="min-h-screen">{children}</main>
+          
+              <SiteFooter />
+              <Toaster />
+            </CartProvider>
+          </AuthProvider>
+        </SessionProvider>
         <Analytics />
       </body>
     </html>

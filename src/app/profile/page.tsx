@@ -18,7 +18,7 @@ export default function ProfilePage() {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
-    name: user?.name || "",
+    name: user?.firstName || "",
     email: user?.email || "",
     phone: "+265 999 123 456",
     location: "Lilongwe, Malawi",
@@ -54,7 +54,7 @@ export default function ProfilePage() {
                   <User className="h-10 w-10 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-2xl">{user.name}</CardTitle>
+                  <CardTitle className="text-2xl">{user.firstName}</CardTitle>
                   <Badge className="mt-2 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 text-primary">
                     {user.role}
                   </Badge>

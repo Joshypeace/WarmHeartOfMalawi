@@ -4,7 +4,7 @@ import { Users, Store, ShoppingCart, DollarSign, TrendingUp, AlertCircle } from 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ProtectedRoute } from "@/components/protected-route"
+import  ProtectedRoute  from "@/components/protected-route"
 import Link from "next/link"
 import { mockVendors, mockOrders, mockProducts } from "@/lib/mock-data"
 import { useAuth } from "@/lib/auth-context"
@@ -53,7 +53,7 @@ function AdminDashboardContent() {
       <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, {user?.name}</p>
+          <p className="text-muted-foreground">Welcome back, {user?.firstName}</p>
         </div>
 
         {/* Alerts */}

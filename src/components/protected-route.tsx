@@ -1,61 +1,75 @@
-"use client"
+// src/components/protected-route.tsx
+"use client";
 
-import type React from "react"
-
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
-import { Loader2 } from "lucide-react"
-
-type UserRole = "customer" | "vendor" | "admin" | "regional_admin"
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
 
 interface ProtectedRouteProps {
-  children: React.ReactNode
-  allowedRoles?: UserRole[]
-  requireAuth?: boolean
+  children: React.ReactNode;
+  requireAuth?: boolean;
+  allowedRoles?: string[]; // Accept both uppercase and lowercase
+  redirectTo?: string;
 }
 
-export function ProtectedRoute({ children, allowedRoles, requireAuth = true }: ProtectedRouteProps) {
-  const { user, isLoading } = useAuth()
-  const router = useRouter()
+export default function ProtectedRoute({
+  children,
+  requireAuth = true,
+  allowedRoles = [],
+  redirectTo = "/login",
+}: ProtectedRouteProps) {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading) {
-      if (requireAuth && !user) {
-        router.push("/login")
-      } else if (user && allowedRoles && !allowedRoles.includes(user.role)) {
+    if (isLoading) return;
+
+    if (requireAuth && !user) {
+      router.push(redirectTo);
+    } else if (user && allowedRoles.length > 0) {
+      // Normalize role comparison - handle both uppercase and lowercase
+      const userRole = user.role.toLowerCase();
+      const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase());
+      
+      if (!normalizedAllowedRoles.includes(userRole)) {
+        // Redirect based on user role
         switch (user.role) {
-          case "vendor":
-            router.push("/vendor/dashboard")
-            break
-          case "admin":
-            router.push("/admin/dashboard")
-            break
-          case "regional_admin":
-            router.push("/regional-admin/dashboard")
-            break
+          case "VENDOR":
+            router.push("/vendor/dashboard");
+            break;
+          case "ADMIN":
+            router.push("/admin/dashboard");
+            break;
+          case "REGIONAL_ADMIN":
+            router.push("/regional-admin/dashboard");
+            break;
           default:
-            router.push("/")
+            router.push("/shop");
         }
       }
     }
-  }, [user, isLoading, requireAuth, allowedRoles, router])
+  }, [user, isLoading, requireAuth, allowedRoles, redirectTo, router]);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
-    )
+    );
   }
 
   if (requireAuth && !user) {
-    return null
+    return null;
   }
 
-  if (user && allowedRoles && !allowedRoles.includes(user.role)) {
-    return null
+  if (user && allowedRoles.length > 0) {
+    const userRole = user.role.toLowerCase();
+    const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase());
+    
+    if (!normalizedAllowedRoles.includes(userRole)) {
+      return null;
+    }
   }
 
-  return <>{children}</>
+  return <>{children}</>;
 }

@@ -4,7 +4,7 @@ import { Users, Store, AlertCircle, MapPin, BarChart3 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ProtectedRoute } from "@/components/protected-route"
+import  ProtectedRoute  from "@/components/protected-route"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { mockVendors } from "@/lib/mock-data"
@@ -132,11 +132,11 @@ function RegionalAdminDashboardContent() {
                   <p className="font-medium">{user?.district}</p>
                 </div>
               </div>
-              {user?.city && (
+              {user?.district && (
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-sm text-muted-foreground">Primary City</p>
-                    <p className="font-medium">{user.city}</p>
+                    <p className="font-medium">{user.district}</p>
                   </div>
                 </div>
               )}
