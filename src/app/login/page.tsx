@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<"customer" | "vendor" | "admin">("customer")
+  const [selectedRole, setSelectedRole] = useState<"customer" | "vendor" | "admin" | "regional_admin">("customer")
   const { login } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
@@ -34,13 +34,15 @@ export default function LoginPage() {
         description: "You have successfully logged in.",
       })
 
-      // Redirect based on role
       switch (selectedRole) {
         case "vendor":
           router.push("/vendor/dashboard")
           break
         case "admin":
           router.push("/admin/dashboard")
+          break
+        case "regional_admin":
+          router.push("/regional-admin/dashboard")
           break
         default:
           router.push("/shop")
@@ -117,7 +119,7 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <Label className="text-sm">Login as</Label>
                 <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as any)} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 h-9 md:h-10">
+                  <TabsList className="grid w-full grid-cols-4 h-9 md:h-10">
                     <TabsTrigger value="customer" className="text-xs md:text-sm">
                       Customer
                     </TabsTrigger>
@@ -126,6 +128,9 @@ export default function LoginPage() {
                     </TabsTrigger>
                     <TabsTrigger value="admin" className="text-xs md:text-sm">
                       Admin
+                    </TabsTrigger>
+                    <TabsTrigger value="regional_admin" className="text-xs md:text-sm">
+                      Reg. Admin
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>

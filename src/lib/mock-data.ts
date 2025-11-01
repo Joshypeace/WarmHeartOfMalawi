@@ -187,8 +187,6 @@ export interface Vendor {
   joinedDate: string
   totalProducts: number
   totalSales: number
-  location?: string
-  rating?: number
 }
 
 export const mockVendors: Vendor[] = [

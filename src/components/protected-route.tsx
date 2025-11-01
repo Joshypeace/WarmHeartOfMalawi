@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Loader2 } from "lucide-react"
 
-type UserRole = "customer" | "vendor" | "admin"
+type UserRole = "customer" | "vendor" | "admin" | "regional_admin"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -24,13 +24,15 @@ export function ProtectedRoute({ children, allowedRoles, requireAuth = true }: P
       if (requireAuth && !user) {
         router.push("/login")
       } else if (user && allowedRoles && !allowedRoles.includes(user.role)) {
-        // Redirect to appropriate dashboard if user doesn't have permission
         switch (user.role) {
           case "vendor":
             router.push("/vendor/dashboard")
             break
           case "admin":
             router.push("/admin/dashboard")
+            break
+          case "regional_admin":
+            router.push("/regional-admin/dashboard")
             break
           default:
             router.push("/")

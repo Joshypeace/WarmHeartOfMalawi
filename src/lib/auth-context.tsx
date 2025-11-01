@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 
-type UserRole = "customer" | "vendor" | "admin"
+type UserRole = "customer" | "vendor" | "admin" | "regional_admin"
 
 interface User {
   id: string
@@ -13,6 +13,8 @@ interface User {
   businessName?: string
   businessDescription?: string
   isApproved?: boolean
+  district?: string
+  city?: string
 }
 
 interface AuthContextType {
@@ -25,7 +27,7 @@ interface AuthContextType {
     password: string,
     name: string,
     role: UserRole,
-    businessInfo?: { businessName: string; businessDescription: string },
+    businessInfo?: { businessName: string; businessDescription: string; district?: string; city?: string },
   ) => Promise<void>
 }
 
@@ -64,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     name: string,
     role: UserRole,
-    businessInfo?: { businessName: string; businessDescription: string },
+    businessInfo?: { businessName: string; businessDescription: string; district?: string; city?: string },
   ) => {
     // Mock registration - in production, this would call an API
     const mockUser: User = {
@@ -76,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       businessName: businessInfo?.businessName,
       businessDescription: businessInfo?.businessDescription,
       isApproved: role === "vendor" ? false : undefined,
+      district: businessInfo?.district,
+      city: businessInfo?.city,
     }
 
     setUser(mockUser)

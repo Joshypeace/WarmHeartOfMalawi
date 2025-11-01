@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Heart, Mail, Lock, UserIcon, Loader2, Store } from "lucide-react"
+import { Heart, Mail, Lock, UserIcon, Loader2, Store, Shield, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,6 +14,27 @@ import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+const MALAWI_DISTRICTS = [
+  "Lilongwe",
+  "Blantyre",
+  "Mzuzu",
+  "Zomba",
+  "Kasungu",
+  "Nkhotakota",
+  "Salima",
+  "Machinga",
+  "Mangochi",
+  "Ntcheu",
+  "Ntchisi",
+  "Dedza",
+  "Dowa",
+  "Nkhata Bay",
+  "Rumphi",
+  "Karonga",
+  "Chitipa",
+]
 
 export default function RegisterPage() {
   const [name, setName] = useState("")
@@ -22,8 +43,10 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [businessName, setBusinessName] = useState("")
   const [businessDescription, setBusinessDescription] = useState("")
+  const [district, setDistrict] = useState("")
+  const [city, setCity] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<"customer" | "vendor">("customer")
+  const [selectedRole, setSelectedRole] = useState<"customer" | "vendor" | "admin" | "regional_admin">("customer")
   const { login } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
@@ -49,13 +72,39 @@ export default function RegisterPage() {
       return
     }
 
+    if ((selectedRole === "customer" || selectedRole === "vendor") && !district) {
+      toast({
+        title: "District required",
+        description: "Please select your district.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if ((selectedRole === "customer" || selectedRole === "vendor") && !city) {
+      toast({
+        title: "City required",
+        description: "Please enter your city or town.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (selectedRole === "regional_admin" && !district) {
+      toast({
+        title: "District required",
+        description: "Please select the district you will manage.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
     try {
       // Mock registration - in production, this would call an API
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      // Auto-login after registration
       await login(email, password, selectedRole)
 
       toast({
@@ -63,12 +112,20 @@ export default function RegisterPage() {
         description:
           selectedRole === "vendor"
             ? "Your vendor account is pending approval."
-            : "Welcome to WaHeA! Start shopping now.",
+            : selectedRole === "regional_admin"
+              ? `Regional admin account created for ${district} district.`
+              : selectedRole === "admin"
+                ? "Super admin account created."
+                : "Welcome to WaHeA! Start shopping now.",
       })
 
       // Redirect based on role
       if (selectedRole === "vendor") {
         router.push("/vendor/dashboard")
+      } else if (selectedRole === "admin") {
+        router.push("/admin/dashboard")
+      } else if (selectedRole === "regional_admin") {
+        router.push("/regional-admin/dashboard")
       } else {
         router.push("/shop")
       }
@@ -99,25 +156,41 @@ export default function RegisterPage() {
         <Card className="border-border/50 shadow-lg">
           <CardHeader>
             <CardTitle>Create Account</CardTitle>
-            <CardDescription>Sign up to start shopping or selling</CardDescription>
+            <CardDescription>Sign up to start shopping, selling, or managing</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as any)} className="mb-6">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="customer">
-                  <UserIcon className="h-4 w-4 mr-2" />
-                  Customer
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="customer" className="text-xs">
+                  <UserIcon className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Customer</span>
                 </TabsTrigger>
-                <TabsTrigger value="vendor">
-                  <Store className="h-4 w-4 mr-2" />
-                  Vendor
+                <TabsTrigger value="vendor" className="text-xs">
+                  <Store className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Vendor</span>
+                </TabsTrigger>
+                <TabsTrigger value="admin" className="text-xs">
+                  <Shield className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Admin</span>
+                </TabsTrigger>
+                <TabsTrigger value="regional_admin" className="text-xs">
+                  <MapPin className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Reg. Admin</span>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
 
             <form onSubmit={handleRegister} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">{selectedRole === "vendor" ? "Your Name" : "Full Name"}</Label>
+                <Label htmlFor="name">
+                  {selectedRole === "vendor"
+                    ? "Your Name"
+                    : selectedRole === "admin"
+                      ? "Admin Name"
+                      : selectedRole === "regional_admin"
+                        ? "Full Name"
+                        : "Full Name"}
+                </Label>
                 <div className="relative">
                   <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -131,6 +204,43 @@ export default function RegisterPage() {
                   />
                 </div>
               </div>
+
+              {(selectedRole === "customer" || selectedRole === "vendor") && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="district">{selectedRole === "vendor" ? "Your District" : "Your District"}</Label>
+                    <Select value={district} onValueChange={setDistrict}>
+                      <SelectTrigger className="pl-10">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <SelectValue placeholder="Select a district" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MALAWI_DISTRICTS.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City/Town</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="city"
+                        type="text"
+                        placeholder="e.g., Lilongwe City"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               {selectedRole === "vendor" && (
                 <>
@@ -160,6 +270,42 @@ export default function RegisterPage() {
                       rows={3}
                       required
                     />
+                  </div>
+                </>
+              )}
+
+              {selectedRole === "regional_admin" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="district">Manage District</Label>
+                    <Select value={district} onValueChange={setDistrict}>
+                      <SelectTrigger className="pl-10">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <SelectValue placeholder="Select a district" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MALAWI_DISTRICTS.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City/Town (optional)</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="city"
+                        type="text"
+                        placeholder="e.g., Lilongwe City"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
                 </>
               )}
