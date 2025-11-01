@@ -1,15 +1,194 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// prisma/schema.prisma
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  role            UserRole  @default(CUSTOMER)
+  firstName       String
+  lastName        String
+  phone           String?
+  district        String?
+  
+  // NextAuth fields
+  emailVerified   DateTime?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  accounts       Account[]
+  sessions       Session[]
+  profile        UserProfile?
+  products       Product[]    @relation("VendorProducts")
+  orders         Order[]      @relation("CustomerOrders")
+  vendorShop     VendorShop?
+  
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  bio         String?
+  avatar      String?
+  address     String?
+  
+  // User relation
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_profiles")
+}
+
+model VendorShop {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  logo        String?
+  isApproved  Boolean  @default(false)
+  
+  // Regional information
+  district    String
+  
+  // Vendor relation
+  vendorId String @unique
+  vendor   User   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  
+  // Products
+  products Product[]
+  
+  @@map("vendor_shops")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  images      String[] // JSON array of image URLs
+  category    String
+  inStock     Boolean  @default(true)
+  stockCount  Int      @default(0)
+  
+  // Vendor relation
+  vendorId String
+  vendor   User   @relation("VendorProducts", fields: [vendorId], references: [id], onDelete: Cascade)
+  
+  // Vendor shop relation
+  shopId   String
+  shop     VendorShop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  // Orders
+  orderItems OrderItem[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("products")
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  status      OrderStatus @default(PENDING)
+  totalAmount Float
+  
+  // Customer relation
+  customerId String
+  customer   User   @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Cascade)
+  
+  // Order items
+  items     OrderItem[]
+  
+  // Shipping address
+  shippingAddress String
+  
+  // Regional information
+  district    String
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  quantity  Int
+  price     Float // Price at time of order
+  
+  // Product relation
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  
+  // Order relation
+  orderId String
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@map("order_items")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  ADMIN
+  REGIONAL_ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
 }
