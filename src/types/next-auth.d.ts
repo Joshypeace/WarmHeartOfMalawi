@@ -1,6 +1,5 @@
 // src/types/next-auth.d.ts
 import NextAuth from "next-auth";
-import { UserRole } from "@prisma/client";
 
 declare module "next-auth" {
   interface User {
@@ -8,7 +7,7 @@ declare module "next-auth" {
     email: string;
     firstName: string;
     lastName: string;
-    role: UserRole;
+    role: string;
     district?: string | null;
     vendorShop?: any;
   }
@@ -19,7 +18,7 @@ declare module "next-auth" {
       email: string;
       firstName: string;
       lastName: string;
-      role: UserRole;
+      role: string;
       district?: string | null;
       vendorShop?: any;
     } & DefaultSession["user"];
@@ -31,7 +30,7 @@ declare module "next-auth/jwt" {
     id: string;
     firstName: string;
     lastName: string;
-    role: UserRole;
+    role: string;
     district?: string | null;
     vendorShop?: any;
   }

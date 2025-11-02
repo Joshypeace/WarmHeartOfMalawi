@@ -1,10 +1,9 @@
 // src/lib/auth.ts
-import { NextAuthOptions, RequestInternal } from "next-auth";
+import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "./prisma";
 import { verifyPassword } from "./auth-utils";
-import { UserRole } from "@prisma/client";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -22,88 +21,78 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
         role: { label: "Role", type: "text" }
       },
-      async authorize(credentials, req) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
+      async authorize(credentials) {
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            throw new Error("Email and password are required");
+          }
+
+          const user = await prisma.user.findUnique({
+            where: {
+              email: credentials.email.toLowerCase(),
+            },
+            include: {
+              vendorShop: true,
+              profile: true,
+            },
+          });
+
+          if (!user) {
+            throw new Error("No user found with this email");
+          }
+
+          // Verify password
+          const isPasswordValid = await verifyPassword(
+            credentials.password,
+            user.password
+          );
+
+          if (!isPasswordValid) {
+            throw new Error("Invalid password");
+          }
+
+          // Check if user role matches the requested role
+          if (credentials.role && user.role !== credentials.role.toUpperCase()) {
+            throw new Error(`Access denied. This account is not a ${credentials.role}.`);
+          }
+
+          // Return user object
+          return {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            district: user.district,
+            vendorShop: user.vendorShop,
+          };
+        } catch (error: any) {
+          console.error("Auth error:", error);
+          throw new Error(error.message || "Authentication failed");
         }
-
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email.toLowerCase(),
-          },
-          include: {
-            vendorShop: true,
-            profile: true,
-          },
-        });
-
-        if (!user) {
-          return null;
-        }
-
-        // Verify password
-        const isPasswordValid = await verifyPassword(
-          credentials.password,
-          user.password
-        );
-
-        if (!isPasswordValid) {
-          return null;
-        }
-
-        // Check if user role matches the requested role
-        if (credentials.role && user.role !== credentials.role.toUpperCase()) {
-          throw new Error(`Access denied. This account is not a ${credentials.role}.`);
-        }
-
-        // Return user object that matches our extended User type
-        return {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          district: user.district,
-          vendorShop: user.vendorShop,
-        };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      // Initial sign in
+    async jwt({ token, user }) {
       if (user) {
-        return {
-          ...token,
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          district: user.district,
-          vendorShop: user.vendorShop,
-        };
+        token.id = user.id;
+        token.firstName = user.firstName;
+        token.lastName = user.lastName;
+        token.role = user.role;
+        token.district = user.district;
+        token.vendorShop = user.vendorShop;
       }
-
-      // Update session when user updates their profile
-      if (trigger === "update" && session) {
-        return { ...token, ...session };
-      }
-
       return token;
     },
     async session({ token, session }) {
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.id,
-          firstName: token.firstName,
-          lastName: token.lastName,
-          role: token.role,
-          district: token.district,
-          vendorShop: token.vendorShop,
-        },
-      };
+      session.user.id = token.id as string;
+      session.user.firstName = token.firstName as string;
+      session.user.lastName = token.lastName as string;
+      session.user.role = token.role as string;
+      session.user.district = token.district as string | null;
+      session.user.vendorShop = token.vendorShop;
+      return session;
     },
   },
 };
