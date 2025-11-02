@@ -2,7 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth-utils';
-import { UserRole } from '@prisma/client';
+
+// Define UserRole enum locally if Prisma client isn't generated yet
+enum UserRole {
+  CUSTOMER = 'CUSTOMER',
+  VENDOR = 'VENDOR',
+  ADMIN = 'ADMIN',
+  REGIONAL_ADMIN = 'REGIONAL_ADMIN'
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest) {
     let userRole: UserRole = UserRole.CUSTOMER;
     if (role) {
       const upperRole = role.toUpperCase();
-      if (upperRole in UserRole) {
+      if (Object.values(UserRole).includes(upperRole as UserRole)) {
         userRole = upperRole as UserRole;
       } else {
         return NextResponse.json(
