@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth-utils';
-import { PrismaClient } from '@prisma/client';
 
 // Define UserRole enum locally
 enum UserRole {
