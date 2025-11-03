@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "@/lib/role-utils";
 
 interface User {
   id: string;

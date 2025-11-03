@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ShoppingCart, User, Heart, Menu, Search, Sparkles, X } from "lucide-react"
+import { ShoppingCart, User, Heart, Menu, Search, Sparkles, X, Store, Shield, MapPin, Package, Settings, BarChart3, Users, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
@@ -17,6 +17,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { useState, useEffect } from "react"
+import { UserRole } from "@/lib/role-utils" // Import the UserRole type
 
 export function SiteHeader() {
   const { user, logout } = useAuth()
@@ -34,13 +35,76 @@ export function SiteHeader() {
 
   const getDashboardLink = () => {
     if (!user) return "/login"
-    switch (user.role as string) {
+    switch (user.role) {
       case "vendor":
         return "/vendor/dashboard"
       case "admin":
         return "/admin/dashboard"
+      case "regional_admin":
+        return "/regional-admin/dashboard"
       default:
         return "/customer/orders"
+    }
+  }
+
+  const formatRoleDisplay = (role: UserRole) => {
+    switch (role) {
+      case "vendor":
+        return "Vendor"
+      case "admin":
+        return "Admin"
+      case "regional_admin":
+        return "Regional Admin"
+      default:
+        return "Customer"
+    }
+  }
+
+  const getRoleIcon = (role: UserRole) => {
+    switch (role) {
+      case "vendor":
+        return <Store className="h-4 w-4" />
+      case "admin":
+        return <Shield className="h-4 w-4" />
+      case "regional_admin":
+        return <MapPin className="h-4 w-4" />
+      default:
+        return <User className="h-4 w-4" />
+    }
+  }
+
+  // Role-specific navigation items
+  const getRoleNavigation = () => {
+    if (!user) return []
+
+    switch (user.role) {
+      case "vendor":
+        return [
+          { href: "/vendor/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
+          { href: "/vendor/products", label: "My Products", icon: <Package className="h-4 w-4" /> },
+          { href: "/vendor/orders", label: "Orders", icon: <ShoppingCart className="h-4 w-4" /> },
+          { href: "/vendor/shop", label: "My Shop", icon: <Store className="h-4 w-4" /> },
+        ]
+      case "admin":
+        return [
+          { href: "/admin/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
+          { href: "/admin/users", label: "User Management", icon: <Users className="h-4 w-4" /> },
+          { href: "/admin/vendors", label: "Vendor Approvals", icon: <Store className="h-4 w-4" /> },
+          { href: "/admin/analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+        ]
+      case "regional_admin":
+        return [
+          { href: "/regional-admin/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
+          { href: "/regional-admin/vendors", label: "District Vendors", icon: <Store className="h-4 w-4" /> },
+          { href: "/regional-admin/orders", label: "District Orders", icon: <ShoppingCart className="h-4 w-4" /> },
+          { href: "/regional-admin/analytics", label: "District Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+        ]
+      default:
+        return [
+          { href: "/customer/orders", label: "My Orders", icon: <Package className="h-4 w-4" /> },
+          { href: "/customer/wishlist", label: "Wishlist", icon: <Heart className="h-4 w-4" /> },
+          { href: "/customer/addresses", label: "Addresses", icon: <MapPin className="h-4 w-4" /> },
+        ]
     }
   }
 
@@ -109,24 +173,26 @@ export function SiteHeader() {
             <Search className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
 
-          {/* Cart */}
-          <Link href="/cart">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="relative h-9 w-9 md:h-11 md:w-11 hover:bg-primary/10 hover:text-primary transition-all duration-200"
-            >
-              <ShoppingCart className="h-4 w-4 md:h-5 md:w-5" />
-              {itemCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="absolute -top-1 -right-1 h-4 w-4 md:h-5 md:w-5 flex items-center justify-center p-0 text-[10px] md:text-xs animate-bounce bg-gradient-to-br from-primary to-accent border-2 border-background"
-                >
-                  {itemCount}
-                </Badge>
-              )}
-            </Button>
-          </Link>
+          {/* Cart - Show cart for customers and vendors */}
+          {(user?.role === "customer" || user?.role === "vendor") && (
+            <Link href="/cart">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative h-9 w-9 md:h-11 md:w-11 hover:bg-primary/10 hover:text-primary transition-all duration-200"
+              >
+                <ShoppingCart className="h-4 w-4 md:h-5 md:w-5" />
+                {itemCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 h-4 w-4 md:h-5 md:w-5 flex items-center justify-center p-0 text-[10px] md:text-xs animate-bounce bg-gradient-to-br from-primary to-accent border-2 border-background"
+                  >
+                    {itemCount}
+                  </Badge>
+                )}
+              </Button>
+            </Link>
+          )}
 
           {/* User Menu */}
           {user ? (
@@ -140,41 +206,76 @@ export function SiteHeader() {
                   <User className="h-4 w-4 md:h-5 md:w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-2">
+              <DropdownMenuContent align="end" className="w-72 p-2">
                 <DropdownMenuLabel className="p-3">
                   <div className="flex flex-col gap-2">
-                    <p className="text-sm font-semibold truncate">{user.firstName}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                        {getRoleIcon(user.role)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate">{user.firstName} {user.lastName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      </div>
+                    </div>
                     <Badge
                       variant="secondary"
                       className="w-fit text-xs bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20"
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
-                      {user.role}
+                      {formatRoleDisplay(user.role)}
+                      {user.district && ` • ${user.district}`}
                     </Badge>
                   </div>
                 </DropdownMenuLabel>
+                
                 <DropdownMenuSeparator />
+
+                {/* Role-specific quick actions */}
+                <div className="p-1">
+                  {getRoleNavigation().map((item) => (
+                    <DropdownMenuItem key={item.href} asChild className="cursor-pointer">
+                      <Link href={item.href} className="flex items-center gap-2 p-2 text-sm">
+                        {item.icon}
+                        {item.label}
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </div>
+
+                <DropdownMenuSeparator />
+
+                {/* Common navigation items */}
                 <DropdownMenuItem asChild className="cursor-pointer">
                   <Link href={getDashboardLink()} className="flex items-center gap-2 p-2">
-                    Dashboard
+                    <Home className="h-4 w-4" />
+                    Main Dashboard
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer">
-                  <Link href="/customer/orders" className="flex items-center gap-2 p-2">
-                    My Orders
-                  </Link>
-                </DropdownMenuItem>
+                
                 <DropdownMenuItem asChild className="cursor-pointer">
                   <Link href="/profile" className="flex items-center gap-2 p-2">
-                    Profile
+                    <User className="h-4 w-4" />
+                    Profile Settings
                   </Link>
                 </DropdownMenuItem>
+
+                {user.role === "vendor" && (
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href="/vendor/settings" className="flex items-center gap-2 p-2">
+                      <Settings className="h-4 w-4" />
+                      Shop Settings
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+
                 <DropdownMenuSeparator />
+
                 <DropdownMenuItem
                   onClick={logout}
-                  className="text-destructive cursor-pointer p-2 focus:text-destructive"
+                  className="text-destructive cursor-pointer p-2 focus:text-destructive flex items-center gap-2"
                 >
+                  <X className="h-4 w-4" />
                   Logout
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -202,6 +303,7 @@ export function SiteHeader() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[280px] sm:w-[320px]">
               <nav className="flex flex-col gap-2 mt-8">
+                {/* Common navigation */}
                 {[
                   { href: "/shop", label: "Shop" },
                   { href: "/categories", label: "Categories" },
@@ -217,6 +319,28 @@ export function SiteHeader() {
                     </Link>
                   </SheetClose>
                 ))}
+
+                {/* Role-specific navigation for logged-in users */}
+                {user && (
+                  <>
+                    <div className="border-t border-border/40 my-2 pt-4">
+                      <p className="text-sm font-semibold text-muted-foreground px-3 mb-2">
+                        {formatRoleDisplay(user.role)} Menu
+                      </p>
+                      {getRoleNavigation().map((item) => (
+                        <SheetClose asChild key={item.href}>
+                          <Link
+                            href={item.href}
+                            className="flex items-center gap-3 text-lg font-medium p-3 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200"
+                          >
+                            {item.icon}
+                            {item.label}
+                          </Link>
+                        </SheetClose>
+                      ))}
+                    </div>
+                  </>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

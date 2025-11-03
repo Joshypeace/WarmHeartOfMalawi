@@ -34,13 +34,13 @@ export default function ProtectedRoute({
       if (!normalizedAllowedRoles.includes(userRole)) {
         // Redirect based on user role
         switch (user.role) {
-          case "VENDOR":
+          case "vendor":
             router.push("/vendor/dashboard");
             break;
-          case "ADMIN":
+          case "admin":
             router.push("/admin/dashboard");
             break;
-          case "REGIONAL_ADMIN":
+          case "regional_admin":
             router.push("/regional-admin/dashboard");
             break;
           default:
