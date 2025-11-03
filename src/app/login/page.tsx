@@ -10,16 +10,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UserRole } from "@/lib/role-utils"
+import { signIn } from "next-auth/react" // Import from next-auth/react
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<"customer" | "vendor" | "admin" | "regional_admin">("customer")
-  const { login } = useAuth()
+  const [selectedRole, setSelectedRole] = useState<UserRole>("customer")
   const router = useRouter()
   const { toast } = useToast()
 
@@ -28,12 +28,25 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      await login(email, password, selectedRole)
+      // Use NextAuth's signIn function directly
+      const result = await signIn("credentials", {
+        email,
+        password,
+        role: selectedRole,
+        redirect: false, // Don't redirect automatically, we'll handle it
+      })
+
+      if (result?.error) {
+        throw new Error(result.error)
+      }
+
+      // If no error, login was successful
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       })
 
+      // Redirect based on role
       switch (selectedRole) {
         case "vendor":
           router.push("/vendor/dashboard")
@@ -47,10 +60,10 @@ export default function LoginPage() {
         default:
           router.push("/shop")
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Login failed",
-        description: "Please check your credentials and try again.",
+        description: error.message || "Please check your credentials and try again.",
         variant: "destructive",
       })
     } finally {
@@ -118,7 +131,7 @@ export default function LoginPage() {
 
               <div className="space-y-2">
                 <Label className="text-sm">Login as</Label>
-                <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as any)} className="w-full">
+                <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)} className="w-full">
                   <TabsList className="grid w-full grid-cols-4 h-9 md:h-10">
                     <TabsTrigger value="customer" className="text-xs md:text-sm">
                       Customer
