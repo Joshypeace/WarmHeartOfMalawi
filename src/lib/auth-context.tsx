@@ -3,8 +3,8 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn, signOut, useSession } from "next-auth/react";
-import { UserRole } from "@/lib/role-utils";
+import { signOut, useSession } from "next-auth/react";
+import { UserRole, normalizeRole } from "@/lib/role-utils";
 
 interface User {
   id: string;
@@ -18,7 +18,6 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string, role: string) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -26,38 +25,30 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession?.() || {};
+  const { data: session, status } = useSession();
   const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
 
   useEffect(() => {
+    if (status === "loading") return;
+
     if (session?.user) {
+      // Ensure the role is properly normalized
+      const normalizedRole = normalizeRole(session.user.role);
+      
       setUser({
         id: session.user.id,
         email: session.user.email!,
         firstName: session.user.firstName,
         lastName: session.user.lastName,
-        role: session.user.role,
+        role: normalizedRole,
         district: session.user.district,
         vendorShop: session.user.vendorShop,
       });
     } else {
       setUser(null);
     }
-  }, [session]);
-
-  const login = async (email: string, password: string, role: string) => {
-    const result = await signIn("credentials", {
-      email,
-      password,
-      role,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      throw new Error(result.error);
-    }
-  };
+  }, [session, status]);
 
   const logout = async () => {
     await signOut({ redirect: false });
@@ -69,7 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        login,
         logout,
         isLoading: status === "loading",
       }}
