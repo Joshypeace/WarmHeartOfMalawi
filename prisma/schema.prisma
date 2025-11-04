@@ -18,6 +18,11 @@ model User {
   phone           String?
   district        String?
   
+  //reset tokens
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+
+
   // NextAuth fields
   emailVerified   DateTime?
   
