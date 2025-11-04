@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -13,22 +13,35 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
-    name: user?.firstName || "",
-    email: user?.email || "",
+    name: "",
+    email: "",
     phone: "+265 999 123 456",
     location: "Lilongwe, Malawi",
     bio: "Passionate about authentic Malawian crafts and supporting local artisans.",
   })
 
-  if (!user) {
-    router.push("/login")
-    return null
-  }
+  // Initialize form data when user loads
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        name: user.firstName || "",
+        email: user.email || "",
+      }))
+    }
+  }, [user])
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login")
+    }
+  }, [user, isLoading, router])
 
   const handleSave = () => {
     toast({
@@ -36,6 +49,60 @@ export default function ProfilePage() {
       description: "Your profile has been successfully updated.",
     })
     setIsEditing(false)
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-muted/20 to-background py-16">
+        <div className="container max-w-4xl mx-auto px-4 md:px-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-muted rounded w-64 mb-2"></div>
+            <div className="h-4 bg-muted rounded w-96 mb-8"></div>
+            
+            <div className="grid gap-6">
+              <Card className="border-2 bg-card/50 backdrop-blur-sm">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-20 w-20 rounded-full bg-muted"></div>
+                    <div>
+                      <div className="h-6 bg-muted rounded w-32 mb-2"></div>
+                      <div className="h-4 bg-muted rounded w-20"></div>
+                    </div>
+                  </div>
+                  <div className="h-9 bg-muted rounded w-24"></div>
+                </CardHeader>
+              </Card>
+
+              <Card className="border-2 bg-card/50 backdrop-blur-sm">
+                <CardHeader>
+                  <div className="h-6 bg-muted rounded w-48"></div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="h-4 bg-muted rounded w-24"></div>
+                        <div className="h-10 bg-muted rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-muted rounded w-16"></div>
+                    <div className="h-24 bg-muted rounded"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render if no user
+  if (!user) {
+    return null
   }
 
   return (
@@ -54,10 +121,15 @@ export default function ProfilePage() {
                   <User className="h-10 w-10 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-2xl">{user.firstName}</CardTitle>
-                  <Badge className="mt-2 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 text-primary">
+                  <CardTitle className="text-2xl">{user.firstName} {user.lastName}</CardTitle>
+                  <Badge className="mt-2 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 text-primary capitalize">
                     {user.role}
                   </Badge>
+                  {user.district && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      District: {user.district}
+                    </div>
+                  )}
                 </div>
               </div>
               {!isEditing ? (

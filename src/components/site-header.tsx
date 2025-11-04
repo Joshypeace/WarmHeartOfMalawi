@@ -94,7 +94,7 @@ export function SiteHeader() {
         { href: "/vendor/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
         { href: "/vendor/products", label: "My Products", icon: <Package className="h-4 w-4" /> },
         { href: "/vendor/orders", label: "Orders", icon: <ShoppingCart className="h-4 w-4" /> },
-        { href: "/vendor/shop", label: "My Shop", icon: <Store className="h-4 w-4" /> },
+        { href: "/vendor/analytics", label: "Analytics", icon: <Store className="h-4 w-4" /> },
       ],
       admin: [
         { href: "/admin/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
