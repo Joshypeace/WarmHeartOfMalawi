@@ -1,46 +1,46 @@
 "use client"
 
-import { Package, ShoppingCart, DollarSign, TrendingUp, Plus } from "lucide-react"
+import { Package, ShoppingCart, DollarSign, TrendingUp, Plus, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import  ProtectedRoute  from "@/components/protected-route"
+import ProtectedRoute from "@/components/protected-route"
 import Link from "next/link"
-import { mockProducts, mockOrders } from "@/lib/mock-data"
 import { useAuth } from "@/lib/auth-context"
+import { useVendorStats, useRecentOrders } from "@/hooks/use-vendor-data"
 
 function VendorDashboardContent() {
   const { user } = useAuth()
+  const { stats, loading: statsLoading, error: statsError } = useVendorStats()
+  const { orders, loading: ordersLoading, error: ordersError } = useRecentOrders()
 
-  // Mock vendor stats - in production, this would be fetched from API
-  const vendorProducts = mockProducts.filter((p) => p.vendorId === "v1")
-  const vendorOrders = mockOrders.filter((o) => o.vendorId === "v1")
-  const totalRevenue = vendorOrders.reduce((sum, order) => sum + order.total, 0)
-  const pendingOrders = vendorOrders.filter((o) => o.status === "pending" || o.status === "processing").length
-
-  const stats = [
+  const dashboardStats = [
     {
       title: "Total Products",
-      value: vendorProducts.length,
+      value: statsLoading ? "..." : stats?.totalProducts?.toString() || "0",
       icon: Package,
       description: "Active listings",
+      loading: statsLoading,
     },
     {
       title: "Pending Orders",
-      value: pendingOrders,
+      value: statsLoading ? "..." : stats?.pendingOrders?.toString() || "0",
       icon: ShoppingCart,
       description: "Awaiting fulfillment",
+      loading: statsLoading,
     },
     {
       title: "Total Revenue",
-      value: `MWK ${totalRevenue.toLocaleString()}`,
+      value: statsLoading ? "..." : `MWK ${stats?.totalRevenue?.toLocaleString() || "0"}`,
       icon: DollarSign,
       description: "All time earnings",
+      loading: statsLoading,
     },
     {
       title: "Growth",
-      value: "+12.5%",
+      value: statsLoading ? "..." : `+${stats?.growth?.toFixed(1) || "0"}%`,
       icon: TrendingUp,
       description: "vs last month",
+      loading: statsLoading,
     },
   ]
 
@@ -62,22 +62,41 @@ function VendorDashboardContent() {
 
         {/* Stats Grid */}
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6 md:mb-8">
-          {stats.map((stat) => {
+          {dashboardStats.map((stat) => {
             const Icon = stat.icon
             return (
               <Card key={stat.title}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2 px-4 md:px-6 pt-4 md:pt-6">
                   <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  {stat.loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  )}
                 </CardHeader>
                 <CardContent className="px-4 md:px-6">
-                  <div className="text-xl md:text-2xl font-bold">{stat.value}</div>
+                  <div className="text-xl md:text-2xl font-bold">
+                    {stat.loading ? (
+                      <div className="h-6 bg-muted rounded animate-pulse w-16"></div>
+                    ) : (
+                      stat.value
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
                 </CardContent>
               </Card>
             )
           })}
         </div>
+
+        {/* Error Handling */}
+        {(statsError || ordersError) && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-destructive text-sm">
+              {statsError || ordersError}
+            </p>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="grid sm:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
@@ -124,19 +143,40 @@ function VendorDashboardContent() {
               <CardTitle className="text-lg md:text-xl">Recent Orders</CardTitle>
             </CardHeader>
             <CardContent className="px-4 md:px-6">
-              {vendorOrders.length === 0 ? (
+              {ordersLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex justify-between items-center gap-2">
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-muted rounded animate-pulse w-24"></div>
+                        <div className="h-3 bg-muted rounded animate-pulse w-32"></div>
+                      </div>
+                      <div className="text-right space-y-2">
+                        <div className="h-4 bg-muted rounded animate-pulse w-16"></div>
+                        <div className="h-3 bg-muted rounded animate-pulse w-12"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : orders.length === 0 ? (
                 <p className="text-xs md:text-sm text-muted-foreground">No orders yet</p>
               ) : (
                 <div className="space-y-2 md:space-y-3">
-                  {vendorOrders.slice(0, 3).map((order) => (
+                  {orders.slice(0, 3).map((order) => (
                     <div key={order.id} className="flex justify-between items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs md:text-sm font-medium truncate">{order.id}</p>
-                        <p className="text-xs text-muted-foreground truncate">{order.customerName}</p>
+                        <p className="text-xs md:text-sm font-medium truncate">#{order.id.slice(-8)}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {order.customer.firstName} {order.customer.lastName}
+                        </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs md:text-sm font-medium">MWK {order.total.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{order.status}</p>
+                        <p className="text-xs md:text-sm font-medium">
+                          MWK {order.totalAmount.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {order.status.toLowerCase()}
+                        </p>
                       </div>
                     </div>
                   ))}
