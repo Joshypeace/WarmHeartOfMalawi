@@ -11,6 +11,15 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 
+interface ForgotPasswordRequest {
+  email: string;
+}
+
+interface ForgotPasswordResponse {
+  success: boolean;
+  message: string;
+}
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -19,21 +28,44 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!email) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      // Mock password reset - in production, this would call an API
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email } as ForgotPasswordRequest),
+      })
+
+      const data: ForgotPasswordResponse = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to send reset link')
+      }
 
       setIsSubmitted(true)
       toast({
         title: "Reset link sent!",
-        description: "Check your email for password reset instructions.",
+        description: data.message || "Check your email for password reset instructions.",
       })
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Please try again later."
+      
       toast({
         title: "Failed to send reset link",
-        description: "Please try again later.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -73,7 +105,19 @@ export default function ForgotPasswordPage() {
                   We've sent a password reset link to <strong>{email}</strong>. Please check your inbox and follow the
                   instructions.
                 </p>
-                <p className="text-xs text-muted-foreground">Didn't receive the email? Check your spam folder.</p>
+                <p className="text-xs text-muted-foreground">
+                  Didn't receive the email? Check your spam folder or try again.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => {
+                    setIsSubmitted(false)
+                    setEmail("")
+                  }}
+                >
+                  Try Another Email
+                </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
