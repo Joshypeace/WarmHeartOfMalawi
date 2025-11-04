@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { UserRole, normalizeRole } from "@/lib/role-utils";
 
 interface User {
@@ -18,6 +18,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  login: (email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -50,6 +51,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [session, status]);
 
+  const login = async (email: string, password: string, role: UserRole) => {
+    const result = await signIn("credentials", {
+      email,
+      password,
+      role: role.toUpperCase(),
+      redirect: false,
+    });
+
+    if (result?.error) {
+      throw new Error(result.error);
+    }
+  };
+
   const logout = async () => {
     await signOut({ redirect: false });
     setUser(null);
@@ -60,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        login,
         logout,
         isLoading: status === "loading",
       }}
