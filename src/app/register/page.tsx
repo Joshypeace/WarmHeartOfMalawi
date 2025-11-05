@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -18,23 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserRole } from "@/lib/role-utils"
 
 const MALAWI_DISTRICTS = [
-  "Lilongwe",
-  "Blantyre",
-  "Mzuzu",
-  "Zomba",
-  "Kasungu",
-  "Nkhotakota",
-  "Salima",
-  "Machinga",
-  "Mangochi",
-  "Ntcheu",
-  "Ntchisi",
-  "Dedza",
-  "Dowa",
-  "Nkhata Bay",
-  "Rumphi",
-  "Karonga",
-  "Chitipa",
+  "Lilongwe", "Blantyre", "Mzuzu", "Zomba", "Kasungu", "Nkhotakota", "Salima", "Machinga",
+  "Mangochi", "Ntcheu", "Ntchisi", "Dedza", "Dowa", "Nkhata Bay", "Rumphi", "Karonga", "Chitipa",
 ]
 
 export default function RegisterPage() {
@@ -48,14 +32,69 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState<UserRole>("customer")
+  const [accessVerified, setAccessVerified] = useState(false)
+  const [accessCode, setAccessCode] = useState("")
   const { login } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
 
+  // Fixed: Separate function to handle role switching with proper access control
+  const handleRoleChange = (newRole: UserRole) => {
+    // If switching to the same role, do nothing
+    if (newRole === selectedRole) return
+
+    // If switching from a protected role to a non-protected role
+    if ((selectedRole === "admin" || selectedRole === "regional_admin") && 
+        (newRole === "customer" || newRole === "vendor")) {
+      setSelectedRole(newRole)
+      setAccessVerified(false)
+      setAccessCode("")
+      return
+    }
+
+    // If switching to protected roles
+    if (newRole === "admin" || newRole === "regional_admin") {
+      const inputCode = prompt(`Enter the secret access code to register as ${newRole.replace("_", " ")}:`)
+      
+      // User clicked cancel
+      if (inputCode === null) return
+      
+      const correctAdminCode = process.env.NEXT_PUBLIC_ADMIN_ACCESS_CODE
+      const correctRegionalCode = process.env.NEXT_PUBLIC_REGIONAL_ADMIN_ACCESS_CODE
+
+      if ((newRole === "admin" && inputCode === correctAdminCode) || 
+          (newRole === "regional_admin" && inputCode === correctRegionalCode)) {
+        setSelectedRole(newRole)
+        setAccessVerified(true)
+        setAccessCode(inputCode)
+        toast({
+          title: "Access granted",
+          description: `You can now create a ${newRole.replace("_", " ")} account.`,
+        })
+      } else {
+        toast({
+          title: "Invalid access code",
+          description: "You are not authorized to register for this role.",
+          variant: "destructive",
+        })
+        // Don't change the role if access code is invalid
+        return
+      }
+    } else {
+      // For non-protected roles (customer, vendor)
+      setSelectedRole(newRole)
+      setAccessVerified(false)
+      setAccessCode("")
+    }
+  }
+
+  // Fixed: Check if current role requires access verification
+  const requiresAccessVerification = selectedRole === "admin" || selectedRole === "regional_admin"
+  const showRegistrationForm = !requiresAccessVerification || accessVerified
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validation
     if (password !== confirmPassword) {
       toast({
         title: "Passwords don't match",
@@ -92,14 +131,22 @@ export default function RegisterPage() {
       return
     }
 
+    // Additional check for protected roles
+    if (requiresAccessVerification && !accessVerified) {
+      toast({
+        title: "Access verification required",
+        description: "Please verify your access before registering.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email,
           password,
@@ -110,6 +157,7 @@ export default function RegisterPage() {
           role: selectedRole.toUpperCase(),
           businessName: selectedRole === 'vendor' ? businessName : undefined,
           businessDescription: selectedRole === 'vendor' ? businessDescription : undefined,
+          accessCode: requiresAccessVerification ? accessCode : undefined,
         }),
       })
 
@@ -119,7 +167,6 @@ export default function RegisterPage() {
         throw new Error(data.error || 'Registration failed')
       }
 
-      // After successful registration, log the user in
       await login(email, password, selectedRole)
 
       toast({
@@ -134,16 +181,11 @@ export default function RegisterPage() {
                 : "Welcome to WaHeA! Start shopping now.",
       })
 
-      // Redirect based on role
-      if (selectedRole === "vendor") {
-        router.push("/vendor/dashboard")
-      } else if (selectedRole === "admin") {
-        router.push("/admin/dashboard")
-      } else if (selectedRole === "regional_admin") {
-        router.push("/regional-admin/dashboard")
-      } else {
-        router.push("/shop")
-      }
+      if (selectedRole === "vendor") router.push("/vendor/dashboard")
+      else if (selectedRole === "admin") router.push("/admin/dashboard")
+      else if (selectedRole === "regional_admin") router.push("/regional-admin/dashboard")
+      else router.push("/shop")
+
     } catch (error: any) {
       console.error('Registration error:', error)
       toast({
@@ -175,7 +217,12 @@ export default function RegisterPage() {
             <CardDescription>Sign up to start shopping, selling, or managing</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)} className="mb-6">
+            {/* Fixed Tabs component */}
+            <Tabs 
+              value={selectedRole} 
+              onValueChange={(value) => handleRoleChange(value as UserRole)}
+              className="mb-6"
+            >
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="customer" className="text-xs">
                   <UserIcon className="h-4 w-4 mr-1" />
@@ -196,171 +243,188 @@ export default function RegisterPage() {
               </TabsList>
             </Tabs>
 
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">
-                  {selectedRole === "vendor"
-                    ? "Your Name"
-                    : selectedRole === "admin"
-                      ? "Admin Name"
-                      : selectedRole === "regional_admin"
-                        ? "Full Name"
-                        : "Full Name"}
-                </Label>
-                <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
+            {/* Fixed conditional rendering */}
+            {requiresAccessVerification && !accessVerified ? (
+              <div className="text-center text-muted-foreground py-8">
+                <Shield className="h-10 w-10 mx-auto mb-3 text-primary" />
+                <p className="text-sm mb-4">
+                  Access code verification required for {selectedRole.replace("_", " ")} registration.
+                </p>
+                <Button 
+                  onClick={() => handleRoleChange(selectedRole)}
+                  variant="outline"
+                >
+                  Verify Access Code
+                </Button>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number (Optional)</Label>
-                <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+265 XXX XXX XXX"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
-              {(selectedRole === "customer" || selectedRole === "vendor" || selectedRole === "regional_admin") && (
-                <div className="space-y-2">
-                  <Label htmlFor="district">
-                    {selectedRole === "regional_admin" ? "Manage District" : "Your District"}
-                    {(selectedRole === "vendor" || selectedRole === "regional_admin") && " *"}
-                  </Label>
-                  <Select 
-                    value={district} 
-                    onValueChange={setDistrict}
-                    required={selectedRole === "vendor" || selectedRole === "regional_admin"}
-                  >
-                    <SelectTrigger className="pl-10">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <SelectValue placeholder="Select a district" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MALAWI_DISTRICTS.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {(selectedRole === "vendor" || selectedRole === "regional_admin") && (
-                    <p className="text-xs text-muted-foreground">
-                      {selectedRole === "regional_admin" 
-                        ? "You will manage users and vendors in this district" 
-                        : "Your business will operate in this district"}
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-4">
+                {/* Show role badge for protected roles */}
+                {requiresAccessVerification && accessVerified && (
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center">
+                    <Shield className="h-5 w-5 mx-auto mb-1 text-primary" />
+                    <p className="text-sm font-medium text-primary">
+                      Creating {selectedRole.replace("_", " ")} Account
                     </p>
-                  )}
-                </div>
-              )}
-
-              {selectedRole === "vendor" && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="businessName">Business Name *</Label>
-                    <div className="relative">
-                      <Store className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="businessName"
-                        type="text"
-                        placeholder="My Awesome Store"
-                        value={businessName}
-                        onChange={(e) => setBusinessName(e.target.value)}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Access verified ✓
+                    </p>
                   </div>
+                )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="businessDescription">Business Description</Label>
-                    <Textarea
-                      id="businessDescription"
-                      placeholder="Tell us about your business..."
-                      value={businessDescription}
-                      onChange={(e) => setBusinessDescription(e.target.value)}
-                      rows={3}
+                {/* Rest of your form fields remain the same */}
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="name"
+                      type="text"
+                      placeholder="John Doe"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="pl-10"
+                      required
                     />
                   </div>
-                </>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                    required
-                    minLength={8}
-                  />
+                {/* Phone */}
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number (Optional)</Label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+265 XXX XXX XXX"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">Password must be at least 8 characters long</p>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
-              </div>
-
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating account...
-                  </>
-                ) : (
-                  "Create Account"
+                {(selectedRole === "customer" || selectedRole === "vendor" || selectedRole === "regional_admin") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="district">
+                      {selectedRole === "regional_admin" ? "Manage District" : "Your District"}
+                      {(selectedRole === "vendor" || selectedRole === "regional_admin") && " *"}
+                    </Label>
+                    <Select
+                      value={district}
+                      onValueChange={setDistrict}
+                      required={selectedRole === "vendor" || selectedRole === "regional_admin"}
+                    >
+                      <SelectTrigger className="pl-10">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <SelectValue placeholder="Select a district" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MALAWI_DISTRICTS.map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </Button>
-            </form>
+
+                {selectedRole === "vendor" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="businessName">Business Name *</Label>
+                      <div className="relative">
+                        <Store className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="businessName"
+                          type="text"
+                          placeholder="My Awesome Store"
+                          value={businessName}
+                          onChange={(e) => setBusinessName(e.target.value)}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="businessDescription">Business Description</Label>
+                      <Textarea
+                        id="businessDescription"
+                        placeholder="Tell us about your business..."
+                        value={businessDescription}
+                        onChange={(e) => setBusinessDescription(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password *</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="pl-10"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Password must be at least 8 characters long</p>
+                </div>
+
+                {/* Confirm Password */}
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
+                </Button>
+              </form>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <div className="text-sm text-center text-muted-foreground">
