@@ -1,52 +1,97 @@
 "use client"
 
-import { Users, Store, ShoppingCart, DollarSign, TrendingUp, AlertCircle } from "lucide-react"
+import { Users, Store, ShoppingCart, DollarSign, TrendingUp, AlertCircle, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import  ProtectedRoute  from "@/components/protected-route"
+import ProtectedRoute from "@/components/protected-route"
 import Link from "next/link"
-import { mockVendors, mockOrders, mockProducts } from "@/lib/mock-data"
 import { useAuth } from "@/lib/auth-context"
+import { useAdminDashboard } from "@/hooks/use-admin-dashboard"
 
 function AdminDashboardContent() {
   const { user } = useAuth()
+  const { stats, loading, error } = useAdminDashboard()
 
-  // Platform statistics
-  const totalVendors = mockVendors.length
-  const pendingVendors = mockVendors.filter((v) => v.status === "pending").length
-  const totalProducts = mockProducts.length
-  const totalOrders = mockOrders.length
-  const totalRevenue = mockOrders.reduce((sum, order) => sum + order.total, 0)
-  const platformFee = totalRevenue * 0.1 // 10% platform fee
-
-  const stats = [
+  const statsData = [
     {
       title: "Total Vendors",
-      value: totalVendors,
+      value: stats?.totalVendors || 0,
       icon: Store,
-      description: `${pendingVendors} pending approval`,
-      alert: pendingVendors > 0,
+      description: `${stats?.pendingVendors || 0} pending approval`,
+      alert: (stats?.pendingVendors || 0) > 0,
     },
     {
       title: "Total Products",
-      value: totalProducts,
+      value: stats?.totalProducts || 0,
       icon: ShoppingCart,
       description: "Active listings",
     },
     {
       title: "Total Orders",
-      value: totalOrders,
+      value: stats?.totalOrders || 0,
       icon: TrendingUp,
       description: "All time",
     },
     {
       title: "Platform Revenue",
-      value: `MWK ${platformFee.toLocaleString()}`,
+      value: `MWK ${(stats?.platformFee || 0).toLocaleString()}`,
       icon: DollarSign,
       description: "10% commission",
     },
   ]
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
+            <p className="text-muted-foreground">Welcome back, {user?.firstName}</p>
+          </div>
+          
+          {/* Loading skeleton */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Card key={index}>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div className="h-4 bg-muted rounded animate-pulse w-20"></div>
+                  <div className="h-4 w-4 bg-muted rounded animate-pulse"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 bg-muted rounded animate-pulse mb-1"></div>
+                  <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
+            <p className="text-muted-foreground">Welcome back, {user?.firstName}</p>
+          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <AlertCircle className="h-16 w-16 text-destructive mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Error loading dashboard</h3>
+              <p className="text-muted-foreground mb-6">{error}</p>
+              <Button onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,14 +102,14 @@ function AdminDashboardContent() {
         </div>
 
         {/* Alerts */}
-        {pendingVendors > 0 && (
+        {(stats?.pendingVendors || 0) > 0 && (
           <Card className="mb-6 border-amber-500/50 bg-amber-500/5">
             <CardContent className="flex items-center gap-3 py-4">
               <AlertCircle className="h-5 w-5 text-amber-500" />
               <div className="flex-1">
                 <p className="font-medium">Pending Vendor Approvals</p>
                 <p className="text-sm text-muted-foreground">
-                  {pendingVendors} vendor{pendingVendors > 1 ? "s" : ""} waiting for approval
+                  {stats?.pendingVendors} vendor{stats!.pendingVendors > 1 ? "s" : ""} waiting for approval
                 </p>
               </div>
               <Button asChild>
@@ -76,12 +121,14 @@ function AdminDashboardContent() {
 
         {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-          {stats.map((stat) => {
+          {statsData.map((stat) => {
             const Icon = stat.icon
             return (
               <Card key={stat.title}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {stat.title}
+                  </CardTitle>
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
@@ -127,27 +174,25 @@ function AdminDashboardContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium">New vendor registration</p>
-                    <p className="text-xs text-muted-foreground">Sweet Malawi</p>
+                {stats?.recentActivity?.map((activity, index) => (
+                  <div key={index} className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium">{activity.title}</p>
+                      <p className="text-xs text-muted-foreground">{activity.description}</p>
+                    </div>
+                    <Badge variant={
+                      activity.status === 'pending' ? 'secondary' : 
+                      activity.status === 'cancelled' ? 'destructive' : 'default'
+                    }>
+                      {activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
+                    </Badge>
                   </div>
-                  <Badge variant="secondary">Pending</Badge>
-                </div>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium">Order completed</p>
-                    <p className="text-xs text-muted-foreground">ORD-001</p>
-                  </div>
-                  <Badge>Delivered</Badge>
-                </div>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-medium">New product listed</p>
-                    <p className="text-xs text-muted-foreground">Handwoven Basket</p>
-                  </div>
-                  <Badge>Active</Badge>
-                </div>
+                ))}
+                {(!stats?.recentActivity || stats.recentActivity.length === 0) && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No recent activity
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -165,15 +210,15 @@ function AdminDashboardContent() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Approved</span>
-                    <span className="font-medium">{mockVendors.filter((v) => v.status === "approved").length}</span>
+                    <span className="font-medium">{stats?.vendorDistribution.approved || 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Pending</span>
-                    <span className="font-medium">{mockVendors.filter((v) => v.status === "pending").length}</span>
+                    <span className="font-medium">{stats?.vendorDistribution.pending || 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Rejected</span>
-                    <span className="font-medium">{mockVendors.filter((v) => v.status === "rejected").length}</span>
+                    <span className="font-medium">{stats?.vendorDistribution.rejected || 0}</span>
                   </div>
                 </div>
               </div>
@@ -182,35 +227,30 @@ function AdminDashboardContent() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Delivered</span>
-                    <span className="font-medium">{mockOrders.filter((o) => o.status === "delivered").length}</span>
+                    <span className="font-medium">{stats?.orderStatus.delivered || 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>In Progress</span>
-                    <span className="font-medium">
-                      {mockOrders.filter((o) => ["pending", "processing", "shipped"].includes(o.status)).length}
-                    </span>
+                    <span className="font-medium">{stats?.orderStatus.inProgress || 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Cancelled</span>
-                    <span className="font-medium">{mockOrders.filter((o) => o.status === "cancelled").length}</span>
+                    <span className="font-medium">{stats?.orderStatus.cancelled || 0}</span>
                   </div>
                 </div>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Top Categories</p>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Crafts</span>
-                    <span className="font-medium">{mockProducts.filter((p) => p.category === "Crafts").length}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Food</span>
-                    <span className="font-medium">{mockProducts.filter((p) => p.category === "Food").length}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Textiles</span>
-                    <span className="font-medium">{mockProducts.filter((p) => p.category === "Textiles").length}</span>
-                  </div>
+                  {stats?.topCategories?.map((category, index) => (
+                    <div key={index} className="flex justify-between text-sm">
+                      <span>{category.category}</span>
+                      <span className="font-medium">{category.count}</span>
+                    </div>
+                  ))}
+                  {(!stats?.topCategories || stats.topCategories.length === 0) && (
+                    <p className="text-sm text-muted-foreground">No categories yet</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -223,7 +263,7 @@ function AdminDashboardContent() {
 
 export default function AdminDashboardPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["ADMIN"]}>
       <AdminDashboardContent />
     </ProtectedRoute>
   )
