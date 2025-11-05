@@ -4,7 +4,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
-// Input validation schema
+// Updated validation schema for local image paths
 const CreateProductSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Product name too long"),
   description: z.string().min(1, "Description is required").max(2000, "Description too long"),
@@ -23,7 +23,7 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  images: z.array(z.string().url()).optional().default([]),
+  images: z.array(z.string()).max(5, "Maximum 5 images allowed").default([]),
 })
 
 export async function POST(request: NextRequest) {
@@ -45,12 +45,7 @@ export async function POST(request: NextRequest) {
         role: "VENDOR" 
       },
       include: { 
-        vendorShop: {
-          select: {
-            id: true,
-            isApproved: true
-          }
-        }
+        vendorShop: true
       }
     })
 
@@ -64,13 +59,6 @@ export async function POST(request: NextRequest) {
     if (!user.vendorShop) {
       return NextResponse.json(
         { error: "Vendor shop not set up. Please create a shop first." },
-        { status: 403 }
-      )
-    }
-
-    if (!user.vendorShop.isApproved) {
-      return NextResponse.json(
-        { error: "Your vendor shop is pending approval. You cannot add products yet." },
         { status: 403 }
       )
     }
@@ -98,12 +86,12 @@ export async function POST(request: NextRequest) {
 
     const { name, description, price, category, stock, images } = validationResult.data
 
-    // Check if vendor has reached product limit (optional - remove if not needed)
+    // Check if vendor has reached product limit
     const productCount = await prisma.product.count({
       where: { vendorId: user.id }
     })
 
-    const MAX_PRODUCTS = 100 // Adjust as needed
+    const MAX_PRODUCTS = 1000
     if (productCount >= MAX_PRODUCTS) {
       return NextResponse.json(
         { error: `Product limit reached. Maximum ${MAX_PRODUCTS} products allowed.` },
@@ -120,7 +108,7 @@ export async function POST(request: NextRequest) {
         category,
         stockCount: stock,
         inStock: stock > 0,
-        images,
+        images: images || [],
         vendorId: user.id,
         shopId: user.vendorShop.id,
       },
@@ -132,10 +120,10 @@ export async function POST(request: NextRequest) {
         stockCount: true,
         inStock: true,
         createdAt: true,
+        images: true,
       }
     })
 
-    // Log product creation for analytics
     console.log(`Product created: ${product.id} by vendor: ${user.id}`)
 
     return NextResponse.json({
@@ -147,7 +135,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Product creation error:", error)
 
-    // Handle specific Prisma errors
     if (error instanceof Error && error.message.includes("prisma")) {
       return NextResponse.json(
         { error: "Database error occurred while creating product" },
@@ -162,7 +149,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Add OPTIONS handler for CORS preflight
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,

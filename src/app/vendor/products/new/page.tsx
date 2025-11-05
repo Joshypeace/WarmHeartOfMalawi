@@ -1,9 +1,9 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Upload, Loader2 } from "lucide-react"
+import { ArrowLeft, Upload, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,11 +14,16 @@ import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 
 const categories = ["Crafts", "Food", "Textiles", "Art", "Jewelry"]
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
 
 function AddProductContent() {
   const router = useRouter()
   const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [images, setImages] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -32,11 +37,131 @@ function AddProductContent() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+
+    const newImages: File[] = []
+    const newPreviews: string[] = []
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+
+      // Validate file type
+      if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload only JPG, PNG, or WebP images.",
+          variant: "destructive",
+        })
+        continue
+      }
+
+      // Validate file size
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "File too large",
+          description: "Please upload images smaller than 10MB.",
+          variant: "destructive",
+        })
+        continue
+      }
+
+      newImages.push(file)
+      
+      // Create preview
+      const previewUrl = URL.createObjectURL(file)
+      newPreviews.push(previewUrl)
+    }
+
+    // Limit to 5 images maximum
+    const totalImages = images.length + newImages.length
+    if (totalImages > 5) {
+      toast({
+        title: "Too many images",
+        description: "You can upload up to 5 images maximum.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setImages(prev => [...prev, ...newImages])
+    setImagePreviews(prev => [...prev, ...newPreviews])
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => {
+      const newPreviews = [...prev]
+      URL.revokeObjectURL(newPreviews[index]) // Clean up memory
+      return newPreviews.filter((_, i) => i !== index)
+    })
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files)
+    
+    if (files.length > 0) {
+      // Create a fake event to reuse the file selection logic
+      const fakeEvent = {
+        target: {
+          files: e.dataTransfer.files
+        }
+      } as React.ChangeEvent<HTMLInputElement>
+      
+      handleFileSelect(fakeEvent)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+  }
+
+  const uploadImagesToServer = async (files: File[]): Promise<string[]> => {
+    if (files.length === 0) return []
+
+    const formData = new FormData()
+    files.forEach(file => {
+      formData.append("images", file)
+    })
+
+    try {
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to upload images")
+      }
+
+      return result.imageUrls || []
+    } catch (error) {
+      console.error("Image upload error:", error)
+      throw new Error("Failed to upload product images")
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
     try {
+      // Upload images first
+      let imageUrls: string[] = []
+      if (images.length > 0) {
+        imageUrls = await uploadImagesToServer(images)
+      }
+
+      // Create product with backend API
       const response = await fetch("/api/vendor/products/new", {
         method: "POST",
         headers: {
@@ -44,7 +169,7 @@ function AddProductContent() {
         },
         body: JSON.stringify({
           ...formData,
-          images: [], // Add image upload logic here if needed
+          images: imageUrls,
         }),
       })
 
@@ -59,6 +184,9 @@ function AddProductContent() {
         description: result.message || "Product created successfully",
         variant: "default",
       })
+
+      // Clean up image preview URLs
+      imagePreviews.forEach(preview => URL.revokeObjectURL(preview))
 
       // Redirect to products page
       router.push("/vendor/products")
@@ -75,7 +203,11 @@ function AddProductContent() {
     }
   }
 
-  const isFormValid = formData.name && formData.description && formData.price && formData.category && formData.stock
+  const isFormValid = formData.name && 
+                     formData.description && 
+                     formData.price && 
+                     formData.category && 
+                     formData.stock
 
   return (
     <div className="min-h-screen bg-background">
@@ -191,12 +323,70 @@ function AddProductContent() {
 
               {/* Product Images */}
               <div className="space-y-2">
-                <Label>Product Images</Label>
-                <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer">
+                <Label htmlFor="images">Product Images</Label>
+                <input
+                  id="images"
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/jpeg, image/jpg, image/png, image/webp"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  disabled={isSubmitting}
+                />
+                
+                {/* Upload Area */}
+                <div
+                  onClick={() => !isSubmitting && fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+                    ${isSubmitting 
+                      ? "border-gray-300 bg-gray-50 cursor-not-allowed" 
+                      : "border-muted-foreground/25 hover:border-primary hover:bg-primary/5"
+                    }`}
+                >
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-1">Click to upload or drag and drop</p>
-                  <p className="text-xs text-muted-foreground">PNG, JPG up to 10MB</p>
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    PNG, JPG, WebP up to 10MB (max 5 images)
+                  </p>
+                  {images.length > 0 && (
+                    <p className="text-sm text-green-600 mt-2 font-medium">
+                      {images.length} image(s) selected
+                    </p>
+                  )}
                 </div>
+
+                {/* Image Previews */}
+                {imagePreviews.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeImage(index)}
+                          disabled={isSubmitting}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 rounded-b-lg truncate">
+                          {images[index]?.name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Submit Button */}

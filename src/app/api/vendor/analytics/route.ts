@@ -1,4 +1,3 @@
-// src/app/api/vendor/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -48,65 +47,75 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
 
     const vendorId = session.user.id;
 
-    // Get vendor's products
-    const vendorProducts = await prisma.product.findMany({
-      where: {
-        vendorId: vendorId,
-        inStock: true,
-      },
+    // Get vendor's shop
+    const vendorShop = await prisma.vendorShop.findUnique({
+      where: { vendorId },
     });
 
-    // Get vendor's orders
-    const orders = await prisma.order.findMany({
-      where: {
-        items: {
-          some: {
-            product: {
-              vendorId: vendorId,
+    if (!vendorShop) {
+      return NextResponse.json(
+        { error: 'Vendor shop not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get all time analytics
+    const [totalRevenueResult, totalOrdersResult, totalProductsResult] = await Promise.all([
+      // Total Revenue
+      prisma.orderItem.aggregate({
+        where: {
+          product: {
+            vendorId: vendorId,
+          },
+          order: {
+            status: {
+              in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+            }
+          }
+        },
+        _sum: {
+          price: true,
+        },
+      }),
+      
+      // Total Orders
+      prisma.order.count({
+        where: {
+          items: {
+            some: {
+              product: {
+                vendorId: vendorId,
+              },
             },
           },
+          status: {
+            in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+          }
         },
-      },
-      include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
-      },
-    });
-
-    // Filter orders to only include this vendor's products
-    const vendorOrders = orders.map(order => {
-      const vendorItems = order.items.filter(item => item.product.vendorId === vendorId);
-      const vendorTotal = vendorItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      }),
       
-      return {
-        ...order,
-        vendorTotal,
-        vendorItems,
-      };
-    });
+      // Total Products
+      prisma.product.count({
+        where: {
+          vendorId: vendorId,
+          inStock: true,
+        },
+      }),
+    ]);
 
-    // Calculate basic metrics
-    const totalRevenue = vendorOrders.reduce((sum, order) => sum + order.vendorTotal, 0);
-    const totalOrders = vendorOrders.length;
+    const totalRevenue = totalRevenueResult._sum.price || 0;
+    const totalOrders = totalOrdersResult;
+    const totalProducts = totalProductsResult;
     const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    const totalProducts = vendorProducts.length;
 
-    // Calculate monthly data (last 6 months)
-    const monthlyData = calculateMonthlyData(vendorOrders);
+    // Get monthly data for last 6 months
+    const monthlyData = await getMonthlyData(vendorId);
     
-    // Calculate top products
-    const topProducts = calculateTopProducts(vendorOrders, vendorProducts);
+    // Get top products
+    const topProducts = await getTopProducts(vendorId);
     
-    // Calculate growth metrics (mock for now - in production, compare with previous period)
-    const growthMetrics = {
-      revenueGrowth: 20.1,
-      ordersGrowth: 12.5,
-      aovGrowth: 8.2,
-      productsGrowth: 2,
-    };
+    // Calculate growth metrics compared to previous period
+    const growthMetrics = await getGrowthMetrics(vendorId, totalRevenue, totalOrders, averageOrderValue, totalProducts);
 
     const analytics: AnalyticsResponse = {
       totalRevenue,
@@ -135,58 +144,223 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
   }
 }
 
-// Helper function to calculate monthly data
-function calculateMonthlyData(orders: any[]) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  const currentMonth = new Date().getMonth();
+// Helper function to calculate monthly data for last 6 months
+async function getMonthlyData(vendorId: string) {
+  const months = [];
+  const currentDate = new Date();
   
-  return months.map((month, index) => {
-    // Calculate which actual month this represents (last 6 months)
-    const monthIndex = (currentMonth - (5 - index) + 12) % 12;
+  // Generate last 6 months
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+    const year = date.getFullYear();
     
-    // Filter orders for this month (mock data for now)
-    const monthOrders = orders.filter(order => {
-      const orderMonth = new Date(order.createdAt).getMonth();
-      return orderMonth === monthIndex;
+    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Get orders for this month
+    const monthlyOrders = await prisma.order.findMany({
+      where: {
+        items: {
+          some: {
+            product: {
+              vendorId: vendorId,
+            },
+          },
+        },
+        status: {
+          in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+        },
+        createdAt: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+      },
+      include: {
+        items: {
+          where: {
+            product: {
+              vendorId: vendorId,
+            },
+          },
+          include: {
+            product: true,
+          },
+        },
+      },
     });
-    
-    const revenue = monthOrders.reduce((sum, order) => sum + order.vendorTotal, 0);
-    const ordersCount = monthOrders.length;
-    
-    // For demo purposes, generate realistic-looking data
-    const baseRevenue = 10000 + (index * 3000);
-    const baseOrders = 5 + (index * 2);
-    
+
+    // Calculate revenue and orders for this month
+    const revenue = monthlyOrders.reduce((sum, order) => {
+      const vendorItemsTotal = order.items.reduce((itemSum, item) => 
+        itemSum + (item.price * item.quantity), 0
+      );
+      return sum + vendorItemsTotal;
+    }, 0);
+
+    const orders = monthlyOrders.length;
+
+    months.push({
+      month: monthName,
+      revenue,
+      orders,
+    });
+  }
+
+  return months;
+}
+
+// Helper function to calculate top products
+async function getTopProducts(vendorId: string) {
+  const topProductsData = await prisma.orderItem.groupBy({
+    by: ['productId'],
+    where: {
+      product: {
+        vendorId: vendorId,
+      },
+      order: {
+        status: {
+          in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+        }
+      }
+    },
+    _sum: {
+      quantity: true,
+    },
+    _avg: {
+      price: true,
+    },
+    orderBy: {
+      _sum: {
+        quantity: 'desc',
+      },
+    },
+    take: 5,
+  });
+
+  // Get product details for top products
+  const productIds = topProductsData.map(item => item.productId);
+  const products = await prisma.product.findMany({
+    where: {
+      id: {
+        in: productIds,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      price: true,
+      images: true,
+    },
+  });
+
+  // Combine sales data with product details
+  return topProductsData.map(item => {
+    const product = products.find(p => p.id === item.productId);
     return {
-      month,
-      revenue: revenue || Math.round(baseRevenue * (0.8 + Math.random() * 0.4)), // Random variation
-      orders: ordersCount || Math.round(baseOrders * (0.8 + Math.random() * 0.4)),
+      id: item.productId,
+      name: product?.name || 'Unknown Product',
+      category: product?.category || 'Uncategorized',
+      price: product?.price || 0,
+      sales: item._sum.quantity || 0,
+      images: product?.images || [],
     };
   });
 }
 
-// Helper function to calculate top products
-function calculateTopProducts(orders: any[], products: any[]) {
-  const productSales: { [key: string]: number } = {};
-  
-  // Count sales for each product
-  orders.forEach(order => {
-    order.vendorItems.forEach((item: any) => {
-      const productId = item.product.id;
-      productSales[productId] = (productSales[productId] || 0) + item.quantity;
-    });
-  });
-  
-  // Create top products array
-  return products
-    .map(product => ({
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      price: product.price,
-      sales: productSales[product.id] || 0,
-      images: product.images,
-    }))
-    .sort((a, b) => b.sales - a.sales)
-    .slice(0, 5);
+// Helper function to calculate growth metrics
+async function getGrowthMetrics(
+  vendorId: string, 
+  currentRevenue: number, 
+  currentOrders: number, 
+  currentAOV: number, 
+  currentProducts: number
+) {
+  const currentDate = new Date();
+  const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const lastMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0, 23, 59, 59, 999);
+
+  // Get last month's data for comparison
+  const [lastMonthRevenueResult, lastMonthOrdersResult, lastMonthProductsResult] = await Promise.all([
+    // Last month revenue
+    prisma.orderItem.aggregate({
+      where: {
+        product: {
+          vendorId: vendorId,
+        },
+        order: {
+          status: {
+            in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+          },
+          createdAt: {
+            gte: lastMonthStart,
+            lte: lastMonthEnd,
+          },
+        },
+      },
+      _sum: {
+        price: true,
+      },
+    }),
+    
+    // Last month orders
+    prisma.order.count({
+      where: {
+        items: {
+          some: {
+            product: {
+              vendorId: vendorId,
+            },
+          },
+        },
+        status: {
+          in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+        },
+        createdAt: {
+          gte: lastMonthStart,
+          lte: lastMonthEnd,
+        },
+      },
+    }),
+    
+    // Products added last month
+    prisma.product.count({
+      where: {
+        vendorId: vendorId,
+        inStock: true,
+        createdAt: {
+          gte: lastMonthStart,
+          lte: lastMonthEnd,
+        },
+      },
+    }),
+  ]);
+
+  const lastMonthRevenue = lastMonthRevenueResult._sum.price || 0;
+  const lastMonthOrders = lastMonthOrdersResult;
+  const lastMonthAOV = lastMonthOrders > 0 ? lastMonthRevenue / lastMonthOrders : 0;
+
+  // Calculate growth percentages
+  const revenueGrowth = lastMonthRevenue > 0 
+    ? ((currentRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 
+    : currentRevenue > 0 ? 100 : 0;
+
+  const ordersGrowth = lastMonthOrders > 0 
+    ? ((currentOrders - lastMonthOrders) / lastMonthOrders) * 100 
+    : currentOrders > 0 ? 100 : 0;
+
+  const aovGrowth = lastMonthAOV > 0 
+    ? ((currentAOV - lastMonthAOV) / lastMonthAOV) * 100 
+    : currentAOV > 0 ? 100 : 0;
+
+  const productsGrowth = lastMonthProductsResult;
+
+  return {
+    revenueGrowth: Math.round(revenueGrowth * 10) / 10, // 1 decimal place
+    ordersGrowth: Math.round(ordersGrowth * 10) / 10,
+    aovGrowth: Math.round(aovGrowth * 10) / 10,
+    productsGrowth,
+  };
 }
