@@ -1,34 +1,54 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Search, Edit, Trash2, Eye } from "lucide-react"
+import { Plus, Search, Edit, Trash2, Eye, Loader2, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import  ProtectedRoute  from "@/components/protected-route"
+import ProtectedRoute from "@/components/protected-route"
 import Link from "next/link"
 import Image from "next/image"
-import { mockProducts } from "@/lib/mock-data"
 import { useToast } from "@/hooks/use-toast"
+import { useVendorProducts } from "@/hooks/use-vendor-products"
 
 function VendorProductsContent() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [deletingProduct, setDeletingProduct] = useState<string | null>(null)
   const { toast } = useToast()
+  
+  const { products, loading, error, deleteProduct } = useVendorProducts(searchQuery)
 
-  // Mock vendor products - in production, filter by actual vendor ID
-  const vendorProducts = mockProducts.filter((p) => p.vendorId === "v1")
+  const handleDelete = async (productId: string, productName: string) => {
+    setDeletingProduct(productId)
+    
+    try {
+      await deleteProduct(productId)
+      toast({
+        title: "Product deleted",
+        description: `${productName} has been removed from your listings.`,
+      })
+    } catch (err: any) {
+      toast({
+        title: "Delete failed",
+        description: err.message || "Failed to delete product. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingProduct(null)
+    }
+  }
 
-  const filteredProducts = vendorProducts.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  const getStockStatus = (stockCount: number) => {
+    if (stockCount > 10) return { variant: "default" as const, text: `${stockCount} units` }
+    if (stockCount > 0) return { variant: "secondary" as const, text: `${stockCount} units` }
+    return { variant: "destructive" as const, text: "Out of stock" }
+  }
 
-  const handleDelete = (productId: string, productName: string) => {
-    toast({
-      title: "Product deleted",
-      description: `${productName} has been removed from your listings.`,
-    })
+  const getProductStatus = (inStock: boolean, stockCount: number) => {
+    if (inStock && stockCount > 0) return { variant: "default" as const, text: "Active" }
+    return { variant: "secondary" as const, text: "Out of Stock" }
   }
 
   return (
@@ -46,6 +66,13 @@ function VendorProductsContent() {
             </Link>
           </Button>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-destructive text-sm">{error}</p>
+          </div>
+        )}
 
         {/* Search */}
         <div className="mb-6">
@@ -75,64 +102,120 @@ function VendorProductsContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No products found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredProducts.map((product) => (
-                    <TableRow key={product.id}>
+                {loading ? (
+                  // Loading skeleton
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <TableRow key={index}>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="relative w-12 h-12 rounded bg-muted flex-shrink-0">
-                            <Image
-                              src={product.image || "/placeholder.svg"}
-                              alt={product.name}
-                              fill
-                              className="object-cover rounded"
-                            />
-                          </div>
-                          <div>
-                            <p className="font-medium">{product.name}</p>
-                            <p className="text-sm text-muted-foreground line-clamp-1">{product.description}</p>
+                          <div className="w-12 h-12 bg-muted rounded animate-pulse"></div>
+                          <div className="space-y-2">
+                            <div className="h-4 bg-muted rounded animate-pulse w-32"></div>
+                            <div className="h-3 bg-muted rounded animate-pulse w-48"></div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{product.category}</TableCell>
-                      <TableCell>MWK {product.price.toLocaleString()}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant={product.stock > 10 ? "default" : product.stock > 0 ? "secondary" : "destructive"}
-                        >
-                          {product.stock} units
-                        </Badge>
+                        <div className="h-4 bg-muted rounded animate-pulse w-20"></div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={product.stock > 0 ? "default" : "secondary"}>
-                          {product.stock > 0 ? "Active" : "Out of Stock"}
-                        </Badge>
+                        <div className="h-4 bg-muted rounded animate-pulse w-16"></div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell>
+                        <div className="h-6 bg-muted rounded animate-pulse w-16"></div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="h-6 bg-muted rounded animate-pulse w-16"></div>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" asChild>
-                            <Link href={`/shop/${product.id}`}>
-                              <Eye className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                          <Button variant="ghost" size="icon" asChild>
-                            <Link href={`/vendor/products/${product.id}/edit`}>
-                              <Edit className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id, product.name)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="h-8 w-8 bg-muted rounded animate-pulse"></div>
+                          <div className="h-8 w-8 bg-muted rounded animate-pulse"></div>
+                          <div className="h-8 w-8 bg-muted rounded animate-pulse"></div>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))
+                ) : products.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      {searchQuery ? 'No products match your search' : 'No products found. Start by adding your first product!'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  products.map((product) => {
+                    const stockStatus = getStockStatus(product.stockCount)
+                    const productStatus = getProductStatus(product.inStock, product.stockCount)
+                    
+                    return (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-12 h-12 rounded bg-muted flex-shrink-0">
+                              {product.images.length > 0 ? (
+                                <Image
+                                  src={product.images[0] || "/placeholder.svg"}
+                                  alt={product.name}
+                                  fill
+                                  className="object-cover rounded"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-muted-foreground/10 rounded">
+                                  <Package className="h-6 w-6 text-muted-foreground" />
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium">{product.name}</p>
+                              <p className="text-sm text-muted-foreground line-clamp-1">
+                                {product.description}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="capitalize">{product.category.toLowerCase()}</TableCell>
+                        <TableCell className="font-medium">
+                          MWK {product.price.toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={stockStatus.variant}>
+                            {stockStatus.text}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={productStatus.variant}>
+                            {productStatus.text}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" asChild>
+                              <Link href={`/shop/${product.id}`}>
+                                <Eye className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                            <Button variant="ghost" size="icon" asChild>
+                              <Link href={`/vendor/products/${product.id}/edit`}>
+                                <Edit className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleDelete(product.id, product.name)}
+                              disabled={deletingProduct === product.id}
+                            >
+                              {deletingProduct === product.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>

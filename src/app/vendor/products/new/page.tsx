@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Upload, Loader2 } from "lucide-react"
@@ -11,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import  ProtectedRoute  from "@/components/protected-route"
+import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 
 const categories = ["Crafts", "Food", "Textiles", "Art", "Jewelry"]
@@ -29,28 +28,64 @@ function AddProductContent() {
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
-    // Mock product creation - in production, this would call an API
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      const response = await fetch("/api/vendor/products/new", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          images: [], // Add image upload logic here if needed
+        }),
+      })
 
-    toast({
-      title: "Product added successfully!",
-      description: "Your product is now live on the marketplace.",
-    })
+      const result = await response.json()
 
-    router.push("/vendor/products")
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create product")
+      }
+
+      toast({
+        title: "Success!",
+        description: result.message || "Product created successfully",
+        variant: "default",
+      })
+
+      // Redirect to products page
+      router.push("/vendor/products")
+      
+    } catch (error) {
+      console.error("Product creation error:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create product. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  const isFormValid = formData.name && formData.description && formData.price && formData.category && formData.stock
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container max-w-3xl mx-auto px-4 md:px-6 py-8">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-6">
+        <Button 
+          variant="ghost" 
+          onClick={() => router.back()} 
+          className="mb-6"
+          disabled={isSubmitting}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Products
         </Button>
@@ -65,7 +100,7 @@ function AddProductContent() {
             <CardContent className="space-y-6">
               {/* Product Name */}
               <div className="space-y-2">
-                <Label htmlFor="name">Product Name</Label>
+                <Label htmlFor="name">Product Name *</Label>
                 <Input
                   id="name"
                   name="name"
@@ -73,12 +108,17 @@ function AddProductContent() {
                   value={formData.name}
                   onChange={handleInputChange}
                   required
+                  disabled={isSubmitting}
+                  maxLength={255}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {formData.name.length}/255 characters
+                </p>
               </div>
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Description *</Label>
                 <Textarea
                   id="description"
                   name="description"
@@ -87,15 +127,21 @@ function AddProductContent() {
                   onChange={handleInputChange}
                   rows={5}
                   required
+                  disabled={isSubmitting}
+                  maxLength={2000}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {formData.description.length}/2000 characters
+                </p>
               </div>
 
               {/* Category */}
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category">Category *</Label>
                 <Select
                   value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                  disabled={isSubmitting}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a category" />
@@ -113,7 +159,7 @@ function AddProductContent() {
               {/* Price and Stock */}
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="price">Price (MWK)</Label>
+                  <Label htmlFor="price">Price (MWK) *</Label>
                   <Input
                     id="price"
                     name="price"
@@ -121,11 +167,14 @@ function AddProductContent() {
                     placeholder="2500"
                     value={formData.price}
                     onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="stock">Stock Quantity</Label>
+                  <Label htmlFor="stock">Stock Quantity *</Label>
                   <Input
                     id="stock"
                     name="stock"
@@ -133,7 +182,9 @@ function AddProductContent() {
                     placeholder="15"
                     value={formData.stock}
                     onChange={handleInputChange}
+                    min="0"
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -150,17 +201,26 @@ function AddProductContent() {
 
               {/* Submit Button */}
               <div className="flex gap-3 pt-4">
-                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                <Button 
+                  type="submit" 
+                  className="flex-1" 
+                  disabled={!isFormValid || isSubmitting}
+                >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Adding Product...
+                      Creating Product...
                     </>
                   ) : (
-                    "Add Product"
+                    "Create Product"
                   )}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => router.back()} className="bg-transparent">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => router.back()} 
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </Button>
               </div>
@@ -174,7 +234,7 @@ function AddProductContent() {
 
 export default function AddProductPage() {
   return (
-    <ProtectedRoute allowedRoles={["vendor"]}>
+    <ProtectedRoute allowedRoles={["VENDOR"]}>
       <AddProductContent />
     </ProtectedRoute>
   )
