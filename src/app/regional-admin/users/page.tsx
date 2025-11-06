@@ -1,65 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { Search, UserCog, MapPin, UserIcon } from "lucide-react"
+import { Search, UserCog, MapPin, UserIcon, Eye, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import  ProtectedRoute  from "@/components/protected-route"
+import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
-
-// Mock users data for regional admin (filtered by district)
-const mockRegionalUsers = [
-  {
-    id: "1",
-    name: "John Banda",
-    email: "john@example.com",
-    role: "customer",
-    district: "Lilongwe",
-    joinedDate: "2024-01-15",
-    orders: 12,
-  },
-  {
-    id: "2",
-    name: "Grace Phiri",
-    email: "grace@example.com",
-    role: "customer",
-    district: "Lilongwe",
-    joinedDate: "2024-02-20",
-    orders: 8,
-  },
-  {
-    id: "3",
-    name: "Peter Mwale",
-    email: "peter@example.com",
-    role: "customer",
-    district: "Lilongwe",
-    joinedDate: "2024-03-10",
-    orders: 5,
-  },
-  {
-    id: "4",
-    name: "Lilongwe Crafts",
-    email: "info@lilongwecrafts.mw",
-    role: "vendor",
-    district: "Lilongwe",
-    joinedDate: "2024-06-15",
-    orders: 0,
-  },
-  {
-    id: "5",
-    name: "Lilongwe Textiles",
-    email: "textiles@lilongwe.mw",
-    role: "vendor",
-    district: "Lilongwe",
-    joinedDate: "2024-07-01",
-    orders: 0,
-  },
-]
+import { useRegionalAdminUsers } from "@/hooks/use-regional-admin-users"
 
 const roleConfig = {
   customer: { label: "Customer", variant: "secondary" as const },
@@ -68,11 +20,12 @@ const roleConfig = {
 
 function RegionalAdminUsersContent() {
   const { user } = useAuth()
+  const { users, stats, loading, error, refetch } = useRegionalAdminUsers()
   const [searchQuery, setSearchQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const { toast } = useToast()
 
-  const filteredUsers = mockRegionalUsers.filter((u) => {
+  const filteredUsers = users.filter((u) => {
     const matchesSearch =
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -85,6 +38,86 @@ function RegionalAdminUsersContent() {
       title: "Action completed",
       description: `${action} for ${userName}`,
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-4xl font-bold">User Management</h1>
+              <div className="h-6 w-20 bg-muted rounded animate-pulse"></div>
+            </div>
+            <div className="h-4 bg-muted rounded animate-pulse w-64"></div>
+          </div>
+
+          {/* Loading skeleton for stats */}
+          <div className="grid gap-6 md:grid-cols-3 mb-8">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Card key={index}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="h-4 bg-muted rounded animate-pulse w-20"></div>
+                      <div className="h-6 bg-muted rounded animate-pulse w-12"></div>
+                    </div>
+                    <div className="h-8 w-8 bg-muted rounded animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Loading skeleton for table */}
+          <div className="space-y-4">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="h-6 bg-muted rounded animate-pulse w-32"></div>
+                      <div className="h-4 bg-muted rounded animate-pulse w-48"></div>
+                    </div>
+                    <div className="h-8 bg-muted rounded animate-pulse w-24"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-4xl font-bold">User Management</h1>
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {user?.district}
+              </Badge>
+            </div>
+            <p className="text-muted-foreground">Manage users and vendors in {user?.district} district</p>
+          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <UserCog className="h-16 w-16 text-destructive mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Error loading users</h3>
+              <p className="text-muted-foreground mb-6">{error}</p>
+              <Button onClick={refetch}>
+                <Loader2 className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -108,7 +141,7 @@ function RegionalAdminUsersContent() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Users</p>
-                  <p className="text-2xl font-bold">{mockRegionalUsers.length}</p>
+                  <p className="text-2xl font-bold">{stats?.totalUsers || 0}</p>
                 </div>
                 <UserIcon className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -119,7 +152,7 @@ function RegionalAdminUsersContent() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Customers</p>
-                  <p className="text-2xl font-bold">{mockRegionalUsers.filter((u) => u.role === "customer").length}</p>
+                  <p className="text-2xl font-bold">{stats?.totalCustomers || 0}</p>
                 </div>
                 <UserIcon className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -130,7 +163,10 @@ function RegionalAdminUsersContent() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Vendors</p>
-                  <p className="text-2xl font-bold">{mockRegionalUsers.filter((u) => u.role === "vendor").length}</p>
+                  <p className="text-2xl font-bold">{stats?.totalVendors || 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {stats?.pendingVendors || 0} pending approval
+                  </p>
                 </div>
                 <UserIcon className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -188,9 +224,20 @@ function RegionalAdminUsersContent() {
                       <TableCell className="font-medium">{u.name}</TableCell>
                       <TableCell>{u.email}</TableCell>
                       <TableCell>
-                        <Badge variant={roleConfig[u.role as keyof typeof roleConfig].variant}>
-                          {roleConfig[u.role as keyof typeof roleConfig].label}
+                        <Badge variant={roleConfig[u.role].variant}>
+                          {roleConfig[u.role].label}
                         </Badge>
+                        {u.vendorShop && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {u.vendorShop.isApproved ? (
+                              <Badge variant="default" className="text-xs">Approved</Badge>
+                            ) : u.vendorShop.isRejected ? (
+                              <Badge variant="destructive" className="text-xs">Rejected</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">Pending</Badge>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>{new Date(u.joinedDate).toLocaleDateString()}</TableCell>
                       <TableCell>{u.orders}</TableCell>
@@ -200,7 +247,7 @@ function RegionalAdminUsersContent() {
                           size="icon"
                           onClick={() => handleUserAction(u.name, "User details viewed")}
                         >
-                          <UserCog className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -217,7 +264,7 @@ function RegionalAdminUsersContent() {
 
 export default function RegionalAdminUsersPage() {
   return (
-    <ProtectedRoute allowedRoles={["regional_admin"]}>
+    <ProtectedRoute allowedRoles={["REGIONAL_ADMIN"]}>
       <RegionalAdminUsersContent />
     </ProtectedRoute>
   )
