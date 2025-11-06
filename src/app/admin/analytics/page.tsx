@@ -2,11 +2,12 @@
 
 import { TrendingUp, DollarSign, ShoppingCart, Users, Package, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import ProtectedRoute from "@/components/protected-route"
 import { useAdminAnalytics } from "@/hooks/use-admin-analytics"
 
 function AdminAnalyticsContent() {
-  const { analytics, loading, error } = useAdminAnalytics()
+  const { analytics, loading, error, refetch } = useAdminAnalytics()
 
   if (loading) {
     return (
@@ -50,12 +51,10 @@ function AdminAnalyticsContent() {
               <TrendingUp className="h-16 w-16 text-destructive mb-4" />
               <h3 className="text-xl font-semibold mb-2">Error loading analytics</h3>
               <p className="text-muted-foreground mb-6">{error}</p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-              >
+              <Button onClick={refetch}>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 Try Again
-              </button>
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -68,7 +67,9 @@ function AdminAnalyticsContent() {
       title: "Total Revenue",
       value: `MWK ${(analytics?.totalRevenue || 0).toLocaleString()}`,
       icon: DollarSign,
-      description: `+${analytics?.growthMetrics.revenueGrowth.toFixed(1) || 0}% from last month`,
+      description: analytics?.growthMetrics?.revenueGrowth ? 
+        `${analytics.growthMetrics.revenueGrowth >= 0 ? '+' : ''}${analytics.growthMetrics.revenueGrowth.toFixed(1)}% from last month` : 
+        "No previous data",
     },
     {
       title: "Platform Fee",
@@ -80,7 +81,9 @@ function AdminAnalyticsContent() {
       title: "Total Orders",
       value: (analytics?.totalOrders || 0).toString(),
       icon: ShoppingCart,
-      description: `+${analytics?.growthMetrics.ordersGrowth.toFixed(1) || 0}% from last month`,
+      description: analytics?.growthMetrics?.ordersGrowth ? 
+        `${analytics.growthMetrics.ordersGrowth >= 0 ? '+' : ''}${analytics.growthMetrics.ordersGrowth.toFixed(1)}% from last month` : 
+        "No previous data",
     },
     {
       title: "Active Vendors",
@@ -102,9 +105,15 @@ function AdminAnalyticsContent() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Platform Analytics</h1>
-          <p className="text-muted-foreground">Monitor platform performance and growth</p>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Platform Analytics</h1>
+            <p className="text-muted-foreground">Monitor platform performance and growth</p>
+          </div>
+          <Button onClick={refetch} variant="outline" size="sm">
+            <Loader2 className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
 
         {/* Key Metrics */}
@@ -131,7 +140,7 @@ function AdminAnalyticsContent() {
         {/* Monthly Performance */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Monthly Performance</CardTitle>
+            <CardTitle>Monthly Performance (Last 6 Months)</CardTitle>
           </CardHeader>
           <CardContent>
             {analytics?.monthlyData && analytics.monthlyData.length > 0 ? (

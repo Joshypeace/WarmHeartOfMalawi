@@ -1,37 +1,8 @@
+// app/api/admin/analytics/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
-
-interface AnalyticsResponse {
-  success: boolean
-  data: {
-    totalRevenue: number
-    platformFee: number
-    totalOrders: number
-    totalProducts: number
-    activeVendors: number
-    pendingVendors: number
-    monthlyData: Array<{
-      month: string
-      revenue: number
-      orders: number
-      vendors: number
-    }>
-    topVendors: Array<{
-      id: string
-      name: string
-      totalProducts: number
-      totalSales: number
-      email: string
-    }>
-    growthMetrics: {
-      revenueGrowth: number
-      ordersGrowth: number
-      vendorsGrowth: number
-    }
-  }
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,97 +20,147 @@ export async function GET(request: NextRequest) {
     const adminUser = await prisma.user.findUnique({
       where: { 
         email: session.user.email,
-        role: "ADMIN"
       }
     })
 
-    if (!adminUser) {
+    if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 }
       )
     }
 
-    // Fetch all data in parallel for performance
+    // Get current date and previous month for growth calculations
+    const currentDate = new Date()
+    const currentMonth = currentDate.getMonth()
+    const currentYear = currentDate.getFullYear()
+    
+    const lastMonthDate = new Date(currentYear, currentMonth - 1, 1)
+    const lastMonth = lastMonthDate.getMonth()
+    const lastMonthYear = lastMonthDate.getFullYear()
+
+    // Fetch all analytics data in parallel
     const [
-      totalRevenueResult,
-      totalOrdersResult,
-      totalProductsResult,
-      vendorStats,
-      monthlyData,
+      totalRevenueData,
+      lastMonthRevenueData,
+      totalOrdersData,
+      lastMonthOrdersData,
+      activeVendorsData,
+      pendingVendorsData,
+      totalProductsData,
+      monthlyRevenueData,
       topVendorsData
     ] = await Promise.all([
-      // Total Revenue
+      // Current month total revenue
       prisma.order.aggregate({
+        where: {
+          status: 'DELIVERED',
+          createdAt: {
+            gte: new Date(currentYear, currentMonth, 1),
+            lt: new Date(currentYear, currentMonth + 1, 1)
+          }
+        },
         _sum: {
           totalAmount: true
-        },
-        where: {
-          status: {
-            in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
-          }
         }
       }),
-      
-      // Total Orders
+
+      // Last month total revenue for growth calculation
+      prisma.order.aggregate({
+        where: {
+          status: 'DELIVERED',
+          createdAt: {
+            gte: new Date(lastMonthYear, lastMonth, 1),
+            lt: new Date(lastMonthYear, lastMonth + 1, 1)
+          }
+        },
+        _sum: {
+          totalAmount: true
+        }
+      }),
+
+      // Current month total orders
       prisma.order.count({
         where: {
-          status: {
-            in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+          createdAt: {
+            gte: new Date(currentYear, currentMonth, 1),
+            lt: new Date(currentYear, currentMonth + 1, 1)
           }
         }
       }),
-      
-      // Total Products
-      prisma.product.count({
+
+      // Last month total orders for growth calculation
+      prisma.order.count({
         where: {
-          inStock: true
+          createdAt: {
+            gte: new Date(lastMonthYear, lastMonth, 1),
+            lt: new Date(lastMonthYear, lastMonth + 1, 1)
+          }
         }
       }),
-      
-      // Vendor Statistics
-      prisma.vendorShop.aggregate({
-        _count: {
-          _all: true
-        },
+
+      // Active vendors (approved vendors with at least one product)
+      prisma.vendorShop.count({
         where: {
-          isApproved: true
+          isApproved: true,
+          products: {
+            some: {}
+          }
         }
       }),
-      
-      // Monthly Data (last 6 months)
-      getMonthlyData(),
-      
-      // Top Vendors
-      getTopVendors()
+
+      // Pending vendors
+      prisma.vendorShop.count({
+        where: {
+          isApproved: false,
+          isRejected: false
+        }
+      }),
+
+      // Total active products
+      prisma.product.count(),
+
+      // Monthly revenue data for the last 6 months
+      getMonthlyRevenueData(),
+
+      // Top performing vendors
+      getTopVendorsData()
     ])
 
-    const totalRevenue = totalRevenueResult._sum.totalAmount || 0
-    const totalOrders = totalOrdersResult
-    const totalProducts = totalProductsResult
-    const activeVendors = vendorStats._count._all
-    const platformFee = totalRevenue * 0.1 // 10% platform fee
+    // Calculate values
+    const totalRevenue = totalRevenueData._sum.totalAmount || 0
+    const lastMonthRevenue = lastMonthRevenueData._sum.totalAmount || 0
+    const totalOrders = totalOrdersData
+    const lastMonthOrders = lastMonthOrdersData
+    const activeVendors = activeVendorsData
+    const pendingVendors = pendingVendorsData
+    const totalProducts = totalProductsData
 
-    // Get pending vendors count
-    const pendingVendors = await prisma.vendorShop.count({
-      where: {
-        isApproved: false
-      }
-    })
+    // Calculate growth percentages
+    const revenueGrowth = lastMonthRevenue > 0 
+      ? ((totalRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 
+      : totalRevenue > 0 ? 100 : 0
 
-    // Calculate growth metrics (simplified - in production, compare with previous period)
-    const growthMetrics = await calculateGrowthMetrics(totalRevenue, totalOrders, activeVendors)
+    const ordersGrowth = lastMonthOrders > 0 
+      ? ((totalOrders - lastMonthOrders) / lastMonthOrders) * 100 
+      : totalOrders > 0 ? 100 : 0
+
+    // Calculate platform fee (10% commission)
+    const platformFee = totalRevenue * 0.1
 
     const analyticsData = {
       totalRevenue,
       platformFee,
       totalOrders,
-      totalProducts,
       activeVendors,
       pendingVendors,
-      monthlyData,
-      topVendors: topVendorsData,
-      growthMetrics
+      totalProducts,
+      growthMetrics: {
+        revenueGrowth,
+        ordersGrowth
+      },
+      monthlyData: monthlyRevenueData,
+      topVendors: topVendorsData
     }
 
     return NextResponse.json({
@@ -148,70 +169,85 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error("Admin analytics error:", error)
+    console.error("Admin analytics fetch error:", error)
     
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        success: false,
+        error: "Failed to fetch analytics data",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     )
   }
 }
 
-// Helper function to calculate monthly data for last 6 months
-async function getMonthlyData() {
+// Helper function to get monthly revenue data
+async function getMonthlyRevenueData() {
   const months = []
   const currentDate = new Date()
   
+  // Get data for the last 6 months
   for (let i = 5; i >= 0; i--) {
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
     const monthName = date.toLocaleDateString('en-US', { month: 'short' })
+    const year = date.getFullYear()
     
-    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
-    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
+    const startDate = new Date(date.getFullYear(), date.getMonth(), 1)
+    const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 1)
 
-    // Get orders for this month
-    const monthlyOrders = await prisma.order.findMany({
-      where: {
-        status: {
-          in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
+    const [revenueData, ordersData, vendorsData] = await Promise.all([
+      // Revenue for the month
+      prisma.order.aggregate({
+        where: {
+          status: 'DELIVERED',
+          createdAt: {
+            gte: startDate,
+            lt: endDate
+          }
         },
-        createdAt: {
-          gte: startOfMonth,
-          lte: endOfMonth,
-        },
-      },
-      include: {
-        items: true
-      },
-    })
+        _sum: {
+          totalAmount: true
+        }
+      }),
 
-    // Get active vendors for this month
-    const monthlyVendors = await prisma.vendorShop.count({
-      where: {
-        isApproved: true,
-        OR: [
-         
-          {
-            products: {
-              some: {
-                createdAt: {
-                  lte: endOfMonth
+      // Orders count for the month
+      prisma.order.count({
+        where: {
+          createdAt: {
+            gte: startDate,
+            lt: endDate
+          }
+        }
+      }),
+
+      // Active vendors for the month (vendors with sales)
+      prisma.vendorShop.count({
+        where: {
+          isApproved: true,
+          products: {
+            some: {
+              orderItems: {
+                some: {
+                  order: {
+                    createdAt: {
+                      gte: startDate,
+                      lt: endDate
+                    }
+                  }
                 }
               }
             }
           }
-        ]
-      }
-    })
-
-    const revenue = monthlyOrders.reduce((sum, order) => sum + order.totalAmount, 0)
-    const orders = monthlyOrders.length
+        }
+      })
+    ])
 
     months.push({
       month: monthName,
-      revenue,
-      orders,
-      vendors: monthlyVendors
+      revenue: revenueData._sum.totalAmount || 0,
+      orders: ordersData,
+      vendors: vendorsData
     })
   }
 
@@ -219,14 +255,16 @@ async function getMonthlyData() {
 }
 
 // Helper function to get top performing vendors
-async function getTopVendors() {
-  const vendorShops = await prisma.vendorShop.findMany({
+async function getTopVendorsData(limit = 5) {
+  const topVendors = await prisma.vendorShop.findMany({
     where: {
       isApproved: true
     },
     include: {
       vendor: {
         select: {
+          firstName: true,
+          lastName: true,
           email: true
         }
       },
@@ -241,21 +279,21 @@ async function getTopVendors() {
         }
       }
     },
-    take: 5
+    orderBy: {
+      products: {
+        _count: 'desc'
+      }
+    },
+    take: limit
   })
 
-  // Calculate sales for each vendor
-  const topVendors = await Promise.all(
-    vendorShops.map(async (shop) => {
+  // Calculate total sales for each vendor
+  const vendorsWithSales = await Promise.all(
+    topVendors.map(async (vendor) => {
       const salesData = await prisma.orderItem.aggregate({
         where: {
           product: {
-            vendorId: shop.vendorId
-          },
-          order: {
-            status: {
-              in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
-            }
+            vendorId: vendor.vendorId
           }
         },
         _sum: {
@@ -264,82 +302,17 @@ async function getTopVendors() {
       })
 
       return {
-        id: shop.id,
-        name: shop.name,
-        totalProducts: shop._count.products,
-        totalSales: salesData._sum.price || 0,
-        email: shop.vendor.email
+        id: vendor.id,
+        name: vendor.name,
+        email: vendor.vendor.email,
+        totalProducts: vendor.products.length,
+        totalSales: salesData._sum.price || 0
       }
     })
   )
 
-  // Sort by total sales descending
-  return topVendors.sort((a, b) => b.totalSales - a.totalSales)
-}
-
-// Helper function to calculate growth metrics
-async function calculateGrowthMetrics(currentRevenue: number, currentOrders: number, currentVendors: number) {
-  const currentDate = new Date()
-  const lastMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
-  const lastMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0, 23, 59, 59, 999)
-
-  // Get last month's data for comparison
-  const [lastMonthRevenue, lastMonthOrders, lastMonthVendors] = await Promise.all([
-    prisma.order.aggregate({
-      where: {
-        status: {
-          in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
-        },
-        createdAt: {
-          gte: lastMonthStart,
-          lte: lastMonthEnd,
-        },
-      },
-      _sum: {
-        totalAmount: true
-      }
-    }),
-    prisma.order.count({
-      where: {
-        status: {
-          in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']
-        },
-        createdAt: {
-          gte: lastMonthStart,
-          lte: lastMonthEnd,
-        },
-      }
-    }),
-    prisma.vendorShop.count({
-      where: {
-        isApproved: true,
-        
-      }
-    })
-  ])
-
-  const lastMonthRevenueValue = lastMonthRevenue._sum.totalAmount || 0
-  const lastMonthOrdersValue = lastMonthOrders
-  const lastMonthVendorsValue = lastMonthVendors
-
-  // Calculate growth percentages
-  const revenueGrowth = lastMonthRevenueValue > 0 
-    ? ((currentRevenue - lastMonthRevenueValue) / lastMonthRevenueValue) * 100 
-    : currentRevenue > 0 ? 100 : 0
-
-  const ordersGrowth = lastMonthOrdersValue > 0 
-    ? ((currentOrders - lastMonthOrdersValue) / lastMonthOrdersValue) * 100 
-    : currentOrders > 0 ? 100 : 0
-
-  const vendorsGrowth = lastMonthVendorsValue > 0 
-    ? ((currentVendors - lastMonthVendorsValue) / lastMonthVendorsValue) * 100 
-    : currentVendors > 0 ? 100 : 0
-
-  return {
-    revenueGrowth: Math.round(revenueGrowth * 10) / 10,
-    ordersGrowth: Math.round(ordersGrowth * 10) / 10,
-    vendorsGrowth: Math.round(vendorsGrowth * 10) / 10
-  }
+  // Sort by total sales
+  return vendorsWithSales.sort((a, b) => b.totalSales - a.totalSales)
 }
 
 export async function OPTIONS() {

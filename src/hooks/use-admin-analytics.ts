@@ -1,3 +1,4 @@
+// hooks/use-admin-analytics.ts
 import { useState, useEffect } from 'react'
 
 interface MonthlyData {
@@ -10,32 +11,32 @@ interface MonthlyData {
 interface TopVendor {
   id: string
   name: string
+  email: string
   totalProducts: number
   totalSales: number
-  email: string
 }
 
 interface GrowthMetrics {
   revenueGrowth: number
   ordersGrowth: number
-  vendorsGrowth: number
 }
 
 interface AnalyticsData {
   totalRevenue: number
   platformFee: number
   totalOrders: number
-  totalProducts: number
   activeVendors: number
   pendingVendors: number
+  totalProducts: number
+  growthMetrics: GrowthMetrics
   monthlyData: MonthlyData[]
   topVendors: TopVendor[]
-  growthMetrics: GrowthMetrics
 }
 
-interface AnalyticsResponse {
+interface ApiResponse {
   success: boolean
   data: AnalyticsData
+  error?: string
 }
 
 export function useAdminAnalytics() {
@@ -43,35 +44,44 @@ export function useAdminAnalytics() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function fetchAnalytics() {
-      try {
-        setLoading(true)
-        setError(null)
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await fetch('/api/admin/analytics')
+      const data: ApiResponse = await response.json()
 
-        const response = await fetch('/api/admin/analytics')
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to fetch analytics')
-        }
-
-        const data: AnalyticsResponse = await response.json()
-
-        if (data.success) {
-          setAnalytics(data.data)
-        } else {
-          throw new Error('Failed to load analytics data')
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch analytics')
-      } finally {
-        setLoading(false)
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch analytics')
       }
-    }
 
+      if (data.success) {
+        setAnalytics(data.data)
+      } else {
+        throw new Error(data.error || 'Failed to fetch analytics')
+      }
+    } catch (err) {
+      console.error('Error fetching analytics:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch analytics')
+      setAnalytics(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const refetch = () => {
+    fetchAnalytics()
+  }
+
+  useEffect(() => {
     fetchAnalytics()
   }, [])
 
-  return { analytics, loading, error }
+  return {
+    analytics,
+    loading,
+    error,
+    refetch
+  }
 }
