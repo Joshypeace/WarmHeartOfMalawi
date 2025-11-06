@@ -77,6 +77,7 @@ model VendorShop {
   description String?
   logo        String?
   isApproved  Boolean   @default(false)
+  isRejected  Boolean   @default(false)
   district    String
   vendorId    String    @unique
   products    Product[]
