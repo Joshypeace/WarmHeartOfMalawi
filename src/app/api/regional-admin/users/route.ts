@@ -5,7 +5,6 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
-// Query parameter validation schema
 const UsersQuerySchema = z.object({
   page: z.string().optional().default("1").transform(Number),
   limit: z.string().optional().default("10").transform(Number),
@@ -15,17 +14,15 @@ const UsersQuerySchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    // Authentication and authorization check
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Unauthorized - Please log in" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }
 
-    // Verify regional admin role and get district
     const regionalAdmin = await prisma.user.findUnique({
       where: { 
         email: session.user.email,
@@ -39,21 +36,18 @@ export async function GET(request: NextRequest) {
 
     if (!regionalAdmin || regionalAdmin.role !== "REGIONAL_ADMIN") {
       return NextResponse.json(
-        { error: "Regional admin access required" },
+        { success: false, error: "Access denied" },
         { status: 403 }
       )
     }
 
     if (!regionalAdmin.district) {
       return NextResponse.json(
-        { error: "No district assigned to regional admin" },
+        { success: false, error: "No district assigned" },
         { status: 400 }
       )
     }
 
-    const district = regionalAdmin.district
-
-    // Parse and validate query parameters
     const { searchParams } = new URL(request.url)
     const queryParams = {
       page: searchParams.get("page"),
@@ -65,37 +59,36 @@ export async function GET(request: NextRequest) {
     const validationResult = UsersQuerySchema.safeParse(queryParams)
     if (!validationResult.success) {
       return NextResponse.json(
-        { error: "Invalid query parameters", details: validationResult.error.errors },
+        { 
+          success: false, 
+          error: "Invalid query parameters"
+        },
         { status: 400 }
       )
     }
 
     const { page, limit, role, search } = validationResult.data
 
-    // Validate pagination parameters
     if (page < 1 || limit < 1 || limit > 50) {
       return NextResponse.json(
-        { error: "Invalid pagination parameters" },
+        { success: false, error: "Invalid pagination" },
         { status: 400 }
       )
     }
 
     const skip = (page - 1) * limit
 
-    // Build where clause for database query
     const whereClause: any = {
-      district: district,
+      district: regionalAdmin.district,
       role: {
-        in: ['CUSTOMER', 'VENDOR'] // Regional admin can only manage customers and vendors
+        in: ['CUSTOMER', 'VENDOR']
       }
     }
 
-    // Add role filter
     if (role !== "all") {
       whereClause.role = role
     }
 
-    // Add search filter
     if (search) {
       whereClause.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
@@ -104,66 +97,59 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Get total count for pagination
-    const totalUsers = await prisma.user.count({
-      where: whereClause
-    })
-
-    // Get users with pagination
-    const users = await prisma.user.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        district: true,
-        createdAt: true,
-        // Include order count for customers
-        userOrders: {
-          select: {
-            id: true
+    const [totalUsers, users] = await Promise.all([
+      prisma.user.count({ where: whereClause }),
+      prisma.user.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          district: true,
+          phone: true,
+          createdAt: true,
+          customerOrders: { 
+            select: { id: true } 
+          },
+          vendorShop: {
+            select: {
+              id: true,
+              name: true,
+              isApproved: true,
+              isRejected: true,
+              products: {
+                select: { id: true }
+              }
+            }
           }
         },
-        // Include vendor shop info if vendor
-        vendorShop: {
-          select: {
-            id: true,
-            name: true,
-            isApproved: true,
-            isRejected: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      skip,
-      take: limit
-    })
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      })
+    ])
 
-    // Transform user data for frontend
     const transformedUsers = users.map(user => ({
       id: user.id,
       name: `${user.firstName} ${user.lastName}`,
       email: user.email,
+      phone: user.phone || "Not provided",
       role: user.role.toLowerCase() as 'customer' | 'vendor',
-      district: user.district,
+      district: user.district || "Not assigned",
       joinedDate: user.createdAt.toISOString(),
-      orders: user.userOrders.length,
+      orders: user.customerOrders.length,
       vendorShop: user.vendorShop ? {
         id: user.vendorShop.id,
         name: user.vendorShop.name,
         isApproved: user.vendorShop.isApproved,
-        isRejected: user.vendorShop.isRejected
+        isRejected: user.vendorShop.isRejected,
+        totalProducts: user.vendorShop.products.length
       } : null
     }))
 
-    // Calculate pagination info
     const totalPages = Math.ceil(totalUsers / limit)
-    const hasNext = page < totalPages
-    const hasPrev = page > 1
 
     return NextResponse.json({
       success: true,
@@ -173,32 +159,19 @@ export async function GET(request: NextRequest) {
           currentPage: page,
           totalPages,
           totalUsers,
-          hasNext,
-          hasPrev,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
         }
       }
     })
 
   } catch (error) {
-    console.error("Regional admin users fetch error:", error)
-    
     return NextResponse.json(
       { 
         success: false,
-        error: "Failed to fetch users",
-        details: error instanceof Error ? error.message : "Unknown error"
+        error: "Internal server error"
       },
       { status: 500 }
     )
   }
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
 }

@@ -5,6 +5,7 @@ interface User {
   id: string
   name: string
   email: string
+  phone: string
   role: 'customer' | 'vendor'
   district: string
   joinedDate: string
@@ -14,6 +15,7 @@ interface User {
     name: string
     isApproved: boolean
     isRejected: boolean
+    totalProducts: number
   }
 }
 
@@ -36,7 +38,7 @@ interface Pagination {
 
 interface ApiResponse {
   success: boolean
-  data: {
+  data?: {
     users: User[]
     pagination: Pagination
   }
@@ -45,7 +47,7 @@ interface ApiResponse {
 
 interface StatsResponse {
   success: boolean
-  data: Stats
+  data?: Stats
   error?: string
 }
 
@@ -77,18 +79,15 @@ export function useRegionalAdminUsers() {
       const response = await fetch(`/api/regional-admin/users?${params}`)
       const data: ApiResponse = await response.json()
 
-      if (!response.ok) {
+      if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to fetch users')
       }
 
-      if (data.success) {
+      if (data.data) {
         setUsers(data.data.users)
         setPagination(data.data.pagination)
-      } else {
-        throw new Error(data.error || 'Failed to fetch users')
       }
     } catch (err) {
-      console.error('Error fetching regional admin users:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch users')
       setUsers([])
     } finally {
@@ -101,18 +100,11 @@ export function useRegionalAdminUsers() {
       const response = await fetch('/api/regional-admin/users/stats')
       const data: StatsResponse = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch stats')
-      }
-
-      if (data.success) {
+      if (response.ok && data.success && data.data) {
         setStats(data.data)
-      } else {
-        throw new Error(data.error || 'Failed to fetch stats')
       }
     } catch (err) {
-      console.error('Error fetching regional admin users stats:', err)
-      // Don't set error for stats - it's not critical
+      // Silent fail for stats
     }
   }
 

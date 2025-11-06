@@ -105,8 +105,8 @@ export function SiteHeader() {
       regional_admin: [
         { href: "/regional-admin/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
         { href: "/regional-admin/vendors", label: "District Vendors", icon: <Store className="h-4 w-4" /> },
-        { href: "/regional-admin/orders", label: "District Orders", icon: <ShoppingCart className="h-4 w-4" /> },
-        { href: "/regional-admin/analytics", label: "District Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+        { href: "/regional-admin/users", label: "District Users", icon: <ShoppingCart className="h-4 w-4" /> },
+        // { href: "/regional-admin/analytics", label: "District Analytics", icon: <BarChart3 className="h-4 w-4" /> },
       ],
       customer: [
         { href: "/customer/orders", label: "My Orders", icon: <Package className="h-4 w-4" /> },
