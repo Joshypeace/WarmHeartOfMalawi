@@ -101,9 +101,10 @@ export async function GET(request: NextRequest) {
         role: true,
         createdAt: true,
         // Include order count for customers
-        orders: {
+        userOrders: {
           select: {
             id: true
+
           }
         },
         // Include vendor shop info if vendor
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
       email: user.email,
       role: user.role,
       joinedDate: user.createdAt.toISOString(),
-      orders: user.orders.length,
+      userOrders: user.userOrders.length,
       vendorShop: user.vendorShop ? {
         id: user.vendorShop.id,
         name: user.vendorShop.name,
