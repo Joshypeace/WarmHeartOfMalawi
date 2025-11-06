@@ -14,6 +14,7 @@ interface User {
   role: UserRole;
   district?: string | null;
   vendorShop?: any;
+  isApproved?: boolean;
 }
 
 interface AuthContextType {
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: normalizedRole,
         district: session.user.district,
         vendorShop: session.user.vendorShop,
+        isApproved: session.user.isApproved,
       });
     } else {
       setUser(null);

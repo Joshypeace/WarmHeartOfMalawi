@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Search, CheckCircle, XCircle, Clock, Eye } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Search, CheckCircle, XCircle, Clock, Eye, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,8 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import  ProtectedRoute  from "@/components/protected-route"
-import { mockVendors, type Vendor } from "@/lib/mock-data"
+import ProtectedRoute from "@/components/protected-route"
+import { useAdminVendors } from "@/hooks/use-admin-vendors"
 import { useToast } from "@/hooks/use-toast"
 
 const statusConfig = {
@@ -29,11 +29,15 @@ const statusConfig = {
 function AdminVendorsContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
+  const [selectedVendor, setSelectedVendor] = useState<any>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  
+  const { vendors, loading, error, pagination, approveVendor, rejectVendor } = useAdminVendors()
   const { toast } = useToast()
 
-  const filteredVendors = mockVendors.filter((vendor) => {
+  // Filter vendors based on search and status
+  const filteredVendors = vendors.filter((vendor) => {
     const matchesSearch =
       vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       vendor.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -41,26 +45,107 @@ function AdminVendorsContent() {
     return matchesSearch && matchesStatus
   })
 
-  const handleViewDetails = (vendor: Vendor) => {
+  const handleViewDetails = (vendor: any) => {
     setSelectedVendor(vendor)
     setIsDialogOpen(true)
   }
 
-  const handleApprove = (vendorId: string, vendorName: string) => {
-    toast({
-      title: "Vendor approved",
-      description: `${vendorName} has been approved and can now start selling.`,
-    })
+  const handleApprove = async (vendorId: string, vendorName: string) => {
+    setIsProcessing(true)
+    const result = await approveVendor(vendorId)
+    
+    if (result.success) {
+      toast({
+        title: "Vendor approved",
+        description: result.message || `${vendorName} has been approved and can now start selling.`,
+      })
+      // Refresh the vendors list
+      window.location.reload()
+    } else {
+      toast({
+        title: "Error",
+        description: result.message || "Failed to approve vendor",
+        variant: "destructive",
+      })
+    }
+    setIsProcessing(false)
     setIsDialogOpen(false)
   }
 
-  const handleReject = (vendorId: string, vendorName: string) => {
-    toast({
-      title: "Vendor rejected",
-      description: `${vendorName} application has been rejected.`,
-      variant: "destructive",
-    })
+  const handleReject = async (vendorId: string, vendorName: string) => {
+    setIsProcessing(true)
+    const result = await rejectVendor(vendorId)
+    
+    if (result.success) {
+      toast({
+        title: "Vendor rejected",
+        description: result.message || `${vendorName} application has been rejected.`,
+        variant: "destructive",
+      })
+      // Refresh the vendors list
+      window.location.reload()
+    } else {
+      toast({
+        title: "Error",
+        description: result.message || "Failed to reject vendor",
+        variant: "destructive",
+      })
+    }
+    setIsProcessing(false)
     setIsDialogOpen(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Vendor Management</h1>
+            <p className="text-muted-foreground">Review and manage vendor applications</p>
+          </div>
+          
+          {/* Loading skeleton */}
+          <div className="space-y-4">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="h-6 bg-muted rounded animate-pulse w-32"></div>
+                      <div className="h-4 bg-muted rounded animate-pulse w-48"></div>
+                    </div>
+                    <div className="h-8 bg-muted rounded animate-pulse w-24"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Vendor Management</h1>
+            <p className="text-muted-foreground">Review and manage vendor applications</p>
+          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <XCircle className="h-16 w-16 text-destructive mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Error loading vendors</h3>
+              <p className="text-muted-foreground mb-6">{error}</p>
+              <Button onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -144,15 +229,25 @@ function AdminVendorsContent() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleApprove(vendor.id, vendor.name)}
+                                  disabled={isProcessing}
                                 >
-                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                  {isProcessing ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                  )}
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleReject(vendor.id, vendor.name)}
+                                  disabled={isProcessing}
                                 >
-                                  <XCircle className="h-4 w-4 text-destructive" />
+                                  {isProcessing ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-destructive" />
+                                  )}
                                 </Button>
                               </>
                             )}
@@ -190,10 +285,14 @@ function AdminVendorsContent() {
                 </div>
               </div>
               <div>
+                <p className="text-sm font-medium mb-1">District</p>
+                <p className="text-sm text-muted-foreground">{selectedVendor?.district}</p>
+              </div>
+              <div>
                 <p className="text-sm font-medium mb-1">Status</p>
                 {selectedVendor && (
-                  <Badge variant={statusConfig[selectedVendor.status].variant}>
-                    {statusConfig[selectedVendor.status].label}
+                  <Badge variant={statusConfig[selectedVendor.status as keyof typeof statusConfig].variant}>
+                    {statusConfig[selectedVendor.status as keyof typeof statusConfig].label}
                   </Badge>
                 )}
               </div>
@@ -203,10 +302,21 @@ function AdminVendorsContent() {
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="bg-transparent">
                   Cancel
                 </Button>
-                <Button variant="destructive" onClick={() => handleReject(selectedVendor.id, selectedVendor.name)}>
+                <Button 
+                  variant="destructive" 
+                  onClick={() => handleReject(selectedVendor.id, selectedVendor.name)}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Reject
                 </Button>
-                <Button onClick={() => handleApprove(selectedVendor.id, selectedVendor.name)}>Approve</Button>
+                <Button 
+                  onClick={() => handleApprove(selectedVendor.id, selectedVendor.name)}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Approve
+                </Button>
               </DialogFooter>
             )}
           </DialogContent>
@@ -218,7 +328,7 @@ function AdminVendorsContent() {
 
 export default function AdminVendorsPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["ADMIN"]}>
       <AdminVendorsContent />
     </ProtectedRoute>
   )

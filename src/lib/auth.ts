@@ -56,6 +56,17 @@ export const authOptions: NextAuthOptions = {
             throw new Error(`Access denied. This account is not a ${credentials.role}.`);
           }
 
+          // VENDOR APPROVAL CHECK
+          if (user.role === "VENDOR") {
+            if (!user.vendorShop) {
+              throw new Error("Vendor account not properly set up. Please contact support.");
+            }
+            
+            if (!user.vendorShop.isApproved) {
+              throw new Error("Your vendor account is pending approval. Please wait for admin approval before logging in.");
+            }
+          }
+
           // Return user object
           return {
             id: user.id,
@@ -92,6 +103,12 @@ export const authOptions: NextAuthOptions = {
       session.user.role = token.role as string;
       session.user.district = token.district as string | null;
       session.user.vendorShop = token.vendorShop;
+      
+      // Add vendor approval status to session
+      if (token.role === "VENDOR" && token.vendorShop) {
+        session.user.isApproved = token.vendorShop.isApproved;
+      }
+      
       return session;
     },
   },
