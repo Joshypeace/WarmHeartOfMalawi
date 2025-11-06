@@ -35,27 +35,26 @@ function AdminUsersContent() {
   })
 
   const handleChangeRole = async (userId: string, userName: string, newRole: string) => {
-    setUpdatingRole(userId)
-    
-    const result = await updateUserRole(userId, newRole)
-    
-    if (result.success) {
-      toast({
-        title: "Role updated",
-        description: result.message || `${userName}'s role has been changed to ${newRole}.`,
-      })
-      // Refresh the users list
-      window.location.reload()
-    } else {
-      toast({
-        title: "Error",
-        description: result.message || "Failed to update user role",
-        variant: "destructive",
-      })
-    }
-    
-    setUpdatingRole(null)
+  setUpdatingRole(userId)
+  
+  const result = await updateUserRole(userId, newRole)
+  
+  if (result.success) {
+    toast({
+      title: "Role updated",
+      description: result.message || `${userName}'s role has been changed to ${newRole}.`,
+    })
+    // No need to reload the page - the hook will refresh the data
+  } else {
+    toast({
+      title: "Error",
+      description: result.error || "Failed to update user role",
+      variant: "destructive",
+    })
   }
+  
+  setUpdatingRole(null)
+}
 
   if (loading) {
     return (

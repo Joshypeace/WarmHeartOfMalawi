@@ -1,3 +1,4 @@
+// app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
@@ -11,42 +12,6 @@ const UsersQuerySchema = z.object({
   role: z.enum(["all", "CUSTOMER", "VENDOR", "ADMIN"]).optional().default("all"),
   search: z.string().optional().default(""),
 })
-
-interface UserResponse {
-  id: string
-  name: string
-  email: string
-  role: string
-  joinedDate: string
-  orders: number
-  district?: string | null
-  phone?: string | null
-  vendorShop?: {
-    id: string
-    name: string
-    isApproved: boolean
-  } | null
-}
-
-interface UsersResponse {
-  success: boolean
-  data: {
-    users: UserResponse[]
-    stats: {
-      totalUsers: number
-      totalCustomers: number
-      totalVendors: number
-      totalAdmins: number
-    }
-    pagination: {
-      currentPage: number
-      totalPages: number
-      totalUsers: number
-      hasNext: boolean
-      hasPrev: boolean
-    }
-  }
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -64,11 +29,10 @@ export async function GET(request: NextRequest) {
     const adminUser = await prisma.user.findUnique({
       where: { 
         email: session.user.email,
-        role: "ADMIN"
       }
     })
 
-    if (!adminUser) {
+    if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 }
@@ -87,7 +51,7 @@ export async function GET(request: NextRequest) {
     const validationResult = UsersQuerySchema.safeParse(queryParams)
     if (!validationResult.success) {
       return NextResponse.json(
-        { error: "Invalid query parameters" },
+        { error: "Invalid query parameters", details: validationResult.error.errors },
         { status: 400 }
       )
     }
@@ -104,85 +68,73 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
-    // Build where clause for users
-    let whereClause: any = {}
+    // Build where clause for database query
+    const whereClause: any = {}
 
-    // Filter by role
+    // Add role filter
     if (role !== "all") {
       whereClause.role = role
     }
 
-    // Search filter
+    // Add search filter
     if (search) {
       whereClause.OR = [
-        {
-          firstName: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        },
-        {
-          lastName: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        },
-        {
-          email: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        }
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    // Get users with pagination and related data
-    const [users, totalUsers] = await Promise.all([
-      prisma.user.findMany({
-        where: whereClause,
-        include: {
-          vendorShop: {
-            select: {
-              id: true,
-              name: true,
-              isApproved: true
-            }
-          },
-          orders: {
-            select: {
-              id: true
-            }
+    // Get total count for pagination
+    const totalUsers = await prisma.user.count({
+      where: whereClause
+    })
+
+    // Get users with pagination
+    const users = await prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        // Include order count for customers
+        orders: {
+          select: {
+            id: true
           }
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        skip,
-        take: limit,
-      }),
-      prisma.user.count({
-        where: whereClause,
-      })
-    ])
+        // Include vendor shop info if vendor
+        vendorShop: {
+          select: {
+            id: true,
+            name: true,
+            isApproved: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip,
+      take: limit
+    })
 
-    // Get user statistics
-    const [totalCustomers, totalVendors, totalAdmins] = await Promise.all([
-      prisma.user.count({ where: { role: "CUSTOMER" } }),
-      prisma.user.count({ where: { role: "VENDOR" } }),
-      prisma.user.count({ where: { role: "ADMIN" } })
-    ])
-
-    // Transform user data
-    const transformedUsers: UserResponse[] = users.map(user => ({
+    // Transform user data for frontend
+    const transformedUsers = users.map(user => ({
       id: user.id,
       name: `${user.firstName} ${user.lastName}`,
       email: user.email,
       role: user.role,
       joinedDate: user.createdAt.toISOString(),
       orders: user.orders.length,
-      district: user.district,
-      phone: user.phone,
-      vendorShop: user.vendorShop
+      vendorShop: user.vendorShop ? {
+        id: user.vendorShop.id,
+        name: user.vendorShop.name,
+        isApproved: user.vendorShop.isApproved
+      } : null
     }))
 
     // Calculate pagination info
@@ -190,16 +142,10 @@ export async function GET(request: NextRequest) {
     const hasNext = page < totalPages
     const hasPrev = page > 1
 
-    const response: UsersResponse = {
+    return NextResponse.json({
       success: true,
       data: {
         users: transformedUsers,
-        stats: {
-          totalUsers,
-          totalCustomers,
-          totalVendors,
-          totalAdmins
-        },
         pagination: {
           currentPage: page,
           totalPages,
@@ -208,15 +154,17 @@ export async function GET(request: NextRequest) {
           hasPrev,
         }
       }
-    }
-
-    return NextResponse.json(response)
+    })
 
   } catch (error) {
     console.error("Admin users fetch error:", error)
     
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        success: false,
+        error: "Failed to fetch users",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     )
   }
