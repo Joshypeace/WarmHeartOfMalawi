@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { UserRole } from "@/lib/role-utils"
+import { signIn } from "next-auth/react"
 
 const MALAWI_DISTRICTS = [
   "Lilongwe", "Blantyre", "Mzuzu", "Zomba", "Kasungu", "Nkhotakota", "Salima", "Machinga",
@@ -34,7 +34,6 @@ export default function RegisterPage() {
   const [selectedRole, setSelectedRole] = useState<UserRole>("customer")
   const [accessVerified, setAccessVerified] = useState(false)
   const [accessCode, setAccessCode] = useState("")
-  const { login } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
 
@@ -167,24 +166,56 @@ export default function RegisterPage() {
         throw new Error(data.error || 'Registration failed')
       }
 
-      await login(email, password, selectedRole)
+      // Show success message based on role
+      if (data.success) {
+        if (selectedRole === "vendor") {
+          toast({
+            title: "Vendor Account Created Successfully! 🎉",
+            description: data.message || "Your vendor account is pending admin approval. You will be notified via email once approved and can then login.",
+            variant: "default",
+            duration: 10000, // Longer duration for important message
+          })
+          
+          // Redirect to login after delay for vendor
+          setTimeout(() => {
+            router.push("/login")
+          }, 3000)
+          
+        } else {
+          toast({
+            title: "Account Created Successfully! 🎉",
+            description: data.message || "Your account has been created successfully.",
+            variant: "default",
+          })
+          
+          // Auto-login for non-vendor roles
+            try {
+            const result = await signIn("credentials", {
+              email,
+              password,
+              role: selectedRole,
+              redirect: false,
+            })
 
-      toast({
-        title: "Account created successfully!",
-        description:
-          selectedRole === "vendor"
-            ? "Your vendor account has been created and is pending approval."
-            : selectedRole === "regional_admin"
-              ? `Regional admin account created for ${district} district.`
-              : selectedRole === "admin"
-                ? "Super admin account created."
-                : "Welcome to WaHeA! Start shopping now.",
-      })
+            if (result?.error) {
+              throw new Error(result.error)
+            }
 
-      if (selectedRole === "vendor") router.push("/vendor/dashboard")
-      else if (selectedRole === "admin") router.push("/admin/dashboard")
-      else if (selectedRole === "regional_admin") router.push("/regional-admin/dashboard")
-      else router.push("/shop")
+            // Redirect based on role after successful login
+            // Note: this branch is executed only for non-vendor roles, so don't check for "vendor" here
+            const redirectPath = 
+              selectedRole === "admin" ? "/admin/dashboard" :
+              selectedRole === "regional_admin" ? "/regional-admin/dashboard" : "/shop"
+            
+            router.push(redirectPath)
+            
+          } catch (loginError) {
+            // If auto-login fails, redirect to login page
+            console.log("Auto-login failed, redirecting to login:", loginError)
+            router.push("/login")
+          }
+        }
+      }
 
     } catch (error: any) {
       console.error('Registration error:', error)
@@ -272,9 +303,24 @@ export default function RegisterPage() {
                   </div>
                 )}
 
-                {/* Rest of your form fields remain the same */}
+                {/* Vendor approval notice */}
+                {selectedRole === "vendor" && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <Store className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">Vendor Approval Required</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          Your vendor account will be reviewed by our admin team. You'll be notified once approved and can then login.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rest of your form fields */}
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="name">Full Name *</Label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input

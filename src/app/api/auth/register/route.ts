@@ -38,7 +38,7 @@ interface SuccessResponse {
     lastName: string;
     role: string;
     district?: string | null;
-    vendorShop?: any; // This would need proper typing based on your Prisma schema
+    vendorShop?: any;
   };
 }
 
@@ -130,43 +130,51 @@ export async function POST(request: NextRequest): Promise<NextResponse<ErrorResp
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create user without transaction for simplicity
-    const user = await prisma.user.create({
-      data: {
-        email: email.toLowerCase().trim(),
-        password: hashedPassword,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone?.trim(),
-        district: district?.trim(),
-        role: userRole,
-        profile: {
-          create: {}
-        }
-      },
-      include: {
-        profile: true
-      }
-    });
-
-    // Create vendor shop if user is a vendor
-    if (userRole === UserRole.VENDOR) {
-      const shopName = businessName?.trim() || `${firstName}'s Shop`;
-      const shopDescription = businessDescription?.trim() || 'Welcome to my shop!';
-      
-      await prisma.vendorShop.create({
+    // Create user and vendor shop in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create user
+      const user = await tx.user.create({
         data: {
-          name: shopName,
-          description: shopDescription,
-          district: district!.trim(), // We validated district exists for vendors
-          vendorId: user.id
+          email: email.toLowerCase().trim(),
+          password: hashedPassword,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone?.trim(),
+          district: district?.trim(),
+          role: userRole,
+          profile: {
+            create: {}
+          }
+        },
+        include: {
+          profile: true
         }
       });
-    }
+
+      let vendorShop = null;
+
+      // Create vendor shop if user is a vendor
+      if (userRole === UserRole.VENDOR) {
+        const shopName = businessName?.trim() || `${firstName}'s Shop`;
+        const shopDescription = businessDescription?.trim() || 'Welcome to my shop!';
+        
+        vendorShop = await tx.vendorShop.create({
+          data: {
+            name: shopName,
+            description: shopDescription,
+            district: district!.trim(),
+            vendorId: user.id,
+            isApproved: false // 🔑 CRITICAL: Set to false for new vendors
+          }
+        });
+      }
+
+      return { user, vendorShop };
+    });
 
     // Fetch the complete user with relations
     const completeUser = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { id: result.user.id },
       include: {
         vendorShop: userRole === UserRole.VENDOR,
         profile: true
@@ -180,12 +188,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<ErrorResp
     console.log('User created successfully:', { 
       id: completeUser.id, 
       email: completeUser.email, 
-      role: completeUser.role 
+      role: completeUser.role,
+      vendorApproved: completeUser.vendorShop?.isApproved
     });
+
+    // Return appropriate message based on role
+    let message = 'User created successfully';
+    if (userRole === UserRole.VENDOR) {
+      message = 'Vendor account created successfully! Your account is pending admin approval. You will be able to login once approved.';
+    }
 
     const responseData: SuccessResponse = {
       success: true,
-      message: 'User created successfully', 
+      message,
       user: {
         id: completeUser.id,
         email: completeUser.email,

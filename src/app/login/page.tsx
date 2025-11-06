@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UserRole } from "@/lib/role-utils"
-import { signIn } from "next-auth/react" // Import from next-auth/react
+import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -33,16 +33,33 @@ export default function LoginPage() {
         email,
         password,
         role: selectedRole,
-        redirect: false, // Don't redirect automatically, we'll handle it
+        redirect: false,
       })
 
       if (result?.error) {
-        throw new Error(result.error)
+        // Handle vendor approval errors with better messaging
+        if (result.error.includes("pending approval")) {
+          toast({
+            title: "Account Pending Approval",
+            description: "Your vendor account is awaiting admin approval. You will be notified via email once approved.",
+            variant: "default",
+            duration: 8000,
+          })
+        } else if (result.error.includes("not a vendor")) {
+          toast({
+            title: "Role Mismatch",
+            description: "This account is not registered as a vendor. Please select the correct role.",
+            variant: "destructive",
+          })
+        } else {
+          throw new Error(result.error)
+        }
+        return
       }
 
       // If no error, login was successful
       toast({
-        title: "Welcome back!",
+        title: "Welcome back! 👋",
         description: "You have successfully logged in.",
       })
 
@@ -61,6 +78,7 @@ export default function LoginPage() {
           router.push("/shop")
       }
     } catch (error: any) {
+      // Handle unexpected errors
       toast({
         title: "Login failed",
         description: error.message || "Please check your credentials and try again.",
@@ -148,6 +166,15 @@ export default function LoginPage() {
                   </TabsList>
                 </Tabs>
               </div>
+
+              {/* Vendor login notice */}
+              {selectedRole === "vendor" && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-800 text-center">
+                    💡 Vendor accounts require admin approval before first login
+                  </p>
+                </div>
+              )}
 
               <Button type="submit" className="w-full h-10 md:h-11 text-sm md:text-base" disabled={isLoading}>
                 {isLoading ? (

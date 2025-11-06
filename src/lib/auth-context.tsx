@@ -62,6 +62,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (result?.error) {
+      // Handle vendor approval errors gracefully
+      if (result.error.includes("pending approval")) {
+        throw new Error("Your vendor account is pending approval. Please wait for admin approval before logging in.");
+      }
       throw new Error(result.error);
     }
   };
