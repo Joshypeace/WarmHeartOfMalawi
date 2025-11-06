@@ -1,17 +1,18 @@
+// hooks/use-admin-vendors.ts
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 
 interface Vendor {
   id: string
+  vendorId: string
   name: string
   email: string
   description: string
   joinedDate: string
   totalProducts: number
   totalSales: number
-  status: "pending" | "approved"
+  status: 'pending' | 'approved' | 'rejected'
   district: string
-  logo: string | null
+  logo?: string
 }
 
 interface Pagination {
@@ -22,120 +23,137 @@ interface Pagination {
   hasPrev: boolean
 }
 
-interface VendorsResponse {
+interface ApiResponse {
   success: boolean
   data: {
     vendors: Vendor[]
     pagination: Pagination
   }
+  error?: string
+}
+
+interface ActionResponse {
+  success: boolean
+  message?: string
+  error?: string
 }
 
 export function useAdminVendors() {
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [pagination, setPagination] = useState<Pagination | null>(null)
-  
-  const searchParams = useSearchParams()
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    totalPages: 0,
+    totalVendors: 0,
+    hasNext: false,
+    hasPrev: false
+  })
 
-  useEffect(() => {
-    async function fetchVendors() {
-      try {
-        setLoading(true)
-        setError(null)
+  const fetchVendors = async (page = 1, limit = 10, status = 'all', search = '') => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        status,
+        search
+      })
 
-        const params = new URLSearchParams()
-        const page = searchParams.get('page')
-        const status = searchParams.get('status')
-        const search = searchParams.get('search')
+      const response = await fetch(`/api/admin/vendors?${params}`)
+      const data: ApiResponse = await response.json()
 
-        if (page) params.set('page', page)
-        if (status) params.set('status', status)
-        if (search) params.set('search', search)
-
-        const queryString = params.toString()
-        const url = queryString ? `/api/admin/vendors?${queryString}` : '/api/admin/vendors'
-
-        const response = await fetch(url)
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to fetch vendors')
-        }
-
-        const data: VendorsResponse = await response.json()
-
-        if (data.success) {
-          setVendors(data.data.vendors)
-          setPagination(data.data.pagination)
-        } else {
-          throw new Error('Failed to load vendors data')
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch vendors')
-        setVendors([])
-        setPagination({
-          currentPage: 1,
-          totalPages: 0,
-          totalVendors: 0,
-          hasNext: false,
-          hasPrev: false
-        })
-      } finally {
-        setLoading(false)
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch vendors')
       }
+
+      if (data.success) {
+        setVendors(data.data.vendors)
+        setPagination(data.data.pagination)
+      } else {
+        throw new Error(data.error || 'Failed to fetch vendors')
+      }
+    } catch (err) {
+      console.error('Error fetching vendors:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch vendors')
+      setVendors([])
+    } finally {
+      setLoading(false)
     }
+  }
 
-    fetchVendors()
-  }, [searchParams])
-
-  const approveVendor = async (vendorId: string): Promise<{ success: boolean; message?: string }> => {
+  const approveVendor = async (vendorId: string): Promise<ActionResponse> => {
     try {
       const response = await fetch(`/api/admin/vendors/${vendorId}/approve`, {
         method: 'POST'
       })
+      const data = await response.json()
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to approve vendor')
+        return {
+          success: false,
+          error: data.error || 'Failed to approve vendor'
+        }
       }
 
-      const data = await response.json()
-      return { success: true, message: data.message }
+      // Refresh the vendors list
+      await fetchVendors()
+      
+      return {
+        success: true,
+        message: data.message
+      }
     } catch (err) {
-      return { 
-        success: false, 
-        message: err instanceof Error ? err.message : 'Failed to approve vendor'
+      console.error('Error approving vendor:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to approve vendor'
       }
     }
   }
 
-  const rejectVendor = async (vendorId: string): Promise<{ success: boolean; message?: string }> => {
+  const rejectVendor = async (vendorId: string): Promise<ActionResponse> => {
     try {
       const response = await fetch(`/api/admin/vendors/${vendorId}/reject`, {
         method: 'POST'
       })
+      const data = await response.json()
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to reject vendor')
+        return {
+          success: false,
+          error: data.error || 'Failed to reject vendor'
+        }
       }
 
-      const data = await response.json()
-      return { success: true, message: data.message }
+      // Refresh the vendors list
+      await fetchVendors()
+      
+      return {
+        success: true,
+        message: data.message
+      }
     } catch (err) {
-      return { 
-        success: false, 
-        message: err instanceof Error ? err.message : 'Failed to reject vendor'
+      console.error('Error rejecting vendor:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to reject vendor'
       }
     }
   }
 
-  return { 
-    vendors, 
-    loading, 
-    error, 
+  useEffect(() => {
+    fetchVendors()
+  }, [])
+
+  return {
+    vendors,
+    loading,
+    error,
     pagination,
+    fetchVendors,
     approveVendor,
     rejectVendor
   }

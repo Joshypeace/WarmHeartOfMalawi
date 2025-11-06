@@ -1,4 +1,3 @@
-// src/app/api/admin/vendors/[id]/reject/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
@@ -7,66 +6,77 @@ import { authOptions } from "@/lib/auth"
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-): Promise<NextResponse<{ success: boolean; message: string } | { error: string }>> {
+): Promise<NextResponse> {
   try {
-    // ✅ Await params due to Next.js 14+ type enforcement
-    const { id: vendorShopId } = await context.params
+    // ✅ Await params for Next.js 14+
+    const { id: vendorId } = await context.params
 
-    // 🔐 Authentication and authorization check
+    // 🔐 Verify authentication
     const session = await getServerSession(authOptions)
-    
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Unauthorized - Please log in" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }
 
     // 👑 Verify admin role
     const adminUser = await prisma.user.findUnique({
-      where: { 
-        email: session.user.email,
-        role: "ADMIN"
-      }
+      where: { email: session.user.email }
     })
 
-    if (!adminUser) {
+    if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { success: false, error: "Admin access required" },
         { status: 403 }
       )
     }
 
-    // 🏪 Find the vendor shop
-    const vendorShop = await prisma.vendorShop.findUnique({
-      where: { id: vendorShopId },
+    // ❌ Reject vendor shop
+    const updatedVendor = await prisma.vendorShop.update({
+      where: { id: vendorId },
+      data: {
+        isApproved: false,
+        isRejected: true,
+        rejectedAt: new Date(),
+        rejectedBy: adminUser.id
+      },
       include: {
-        vendor: true
+        vendor: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
       }
-    })
-
-    if (!vendorShop) {
-      return NextResponse.json(
-        { error: "Vendor shop not found" },
-        { status: 404 }
-      )
-    }
-
-    // ❌ Reject the vendor shop by deleting it
-    await prisma.vendorShop.delete({
-      where: { id: vendorShopId }
     })
 
     return NextResponse.json({
       success: true,
-      message: `${vendorShop.name} application has been rejected and removed from the system.`
+      message: `Vendor ${updatedVendor.vendor.firstName} ${updatedVendor.vendor.lastName} has been rejected.`,
+      data: updatedVendor
     })
 
   } catch (error) {
-    console.error("Vendor rejection error:", error)
-    
+    console.error("Reject vendor error:", error)
+
+    if (
+      error instanceof Error &&
+      error.message.includes("Record to update not found")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Vendor not found" },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        success: false,
+        error: "Failed to reject vendor",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     )
   }

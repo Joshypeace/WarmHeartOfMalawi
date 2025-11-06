@@ -51,49 +51,48 @@ function AdminVendorsContent() {
   }
 
   const handleApprove = async (vendorId: string, vendorName: string) => {
-    setIsProcessing(true)
-    const result = await approveVendor(vendorId)
-    
-    if (result.success) {
-      toast({
-        title: "Vendor approved",
-        description: result.message || `${vendorName} has been approved and can now start selling.`,
-      })
-      // Refresh the vendors list
-      window.location.reload()
-    } else {
-      toast({
-        title: "Error",
-        description: result.message || "Failed to approve vendor",
-        variant: "destructive",
-      })
-    }
-    setIsProcessing(false)
-    setIsDialogOpen(false)
+  setIsProcessing(true)
+  const result = await approveVendor(vendorId)
+  
+  if (result.success) {
+    toast({
+      title: "Vendor approved",
+      description: result.message || `${vendorName} has been approved and can now start selling.`,
+    })
+    // No need to reload the page - the hook will refresh the data
+  } else {
+    toast({
+      title: "Error",
+      description: result.error || "Failed to approve vendor",
+      variant: "destructive",
+    })
   }
+  setIsProcessing(false)
+  setIsDialogOpen(false)
+}
+
 
   const handleReject = async (vendorId: string, vendorName: string) => {
-    setIsProcessing(true)
-    const result = await rejectVendor(vendorId)
-    
-    if (result.success) {
-      toast({
-        title: "Vendor rejected",
-        description: result.message || `${vendorName} application has been rejected.`,
-        variant: "destructive",
-      })
-      // Refresh the vendors list
-      window.location.reload()
-    } else {
-      toast({
-        title: "Error",
-        description: result.message || "Failed to reject vendor",
-        variant: "destructive",
-      })
-    }
-    setIsProcessing(false)
-    setIsDialogOpen(false)
+  setIsProcessing(true)
+  const result = await rejectVendor(vendorId)
+  
+  if (result.success) {
+    toast({
+      title: "Vendor rejected",
+      description: result.message || `${vendorName} application has been rejected.`,
+      variant: "destructive",
+    })
+    // No need to reload the page - the hook will refresh the data
+  } else {
+    toast({
+      title: "Error",
+      description: result.error || "Failed to reject vendor",
+      variant: "destructive",
+    })
   }
+  setIsProcessing(false)
+  setIsDialogOpen(false)
+}
 
   if (loading) {
     return (

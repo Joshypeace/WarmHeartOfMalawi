@@ -1,4 +1,3 @@
-// src/app/api/admin/vendors/[id]/approve/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
@@ -7,76 +6,77 @@ import { authOptions } from "@/lib/auth"
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-): Promise<NextResponse<{ success: boolean; message: string } | { error: string }>> {
+): Promise<NextResponse> {
   try {
-    // ✅ Await params due to Next.js 14+ change
-    const { id: vendorShopId } = await context.params
+    // ✅ Await params (required for Next.js 14+)
+    const { id: vendorId } = await context.params
 
-    // 🔐 Authentication and authorization check
+    // 🔐 Verify authentication
     const session = await getServerSession(authOptions)
-    
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Unauthorized - Please log in" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }
 
     // 👑 Verify admin role
     const adminUser = await prisma.user.findUnique({
-      where: { 
-        email: session.user.email,
-        role: "ADMIN"
-      }
+      where: { email: session.user.email }
     })
 
-    if (!adminUser) {
+    if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { success: false, error: "Admin access required" },
         { status: 403 }
       )
     }
 
-    // 🏪 Find the vendor shop
-    const vendorShop = await prisma.vendorShop.findUnique({
-      where: { id: vendorShopId },
-      include: {
-        vendor: true
-      }
-    })
-
-    if (!vendorShop) {
-      return NextResponse.json(
-        { error: "Vendor shop not found" },
-        { status: 404 }
-      )
-    }
-
-    if (vendorShop.isApproved) {
-      return NextResponse.json(
-        { error: "Vendor is already approved" },
-        { status: 400 }
-      )
-    }
-
-    // ✅ Approve the vendor shop
-    await prisma.vendorShop.update({
-      where: { id: vendorShopId },
+    // 🛠️ Approve vendor shop
+    const updatedVendor = await prisma.vendorShop.update({
+      where: { id: vendorId },
       data: {
-        isApproved: true
+        isApproved: true,
+        isRejected: false,
+        approvedAt: new Date(),
+        approvedBy: adminUser.id
+      },
+      include: {
+        vendor: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
       }
     })
 
     return NextResponse.json({
       success: true,
-      message: `${vendorShop.name} has been approved and can now start selling.`
+      message: `Vendor ${updatedVendor.vendor.firstName} ${updatedVendor.vendor.lastName} has been approved successfully.`,
+      data: updatedVendor
     })
 
   } catch (error) {
-    console.error("Vendor approval error:", error)
-    
+    console.error("Approve vendor error:", error)
+
+    if (
+      error instanceof Error &&
+      error.message.includes("Record to update not found")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Vendor not found" },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        success: false,
+        error: "Failed to approve vendor",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     )
   }

@@ -1,3 +1,4 @@
+// app/api/admin/vendors/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
@@ -8,7 +9,7 @@ import { authOptions } from "@/lib/auth"
 const VendorsQuerySchema = z.object({
   page: z.string().optional().default("1").transform(Number),
   limit: z.string().optional().default("10").transform(Number),
-  status: z.enum(["all", "pending", "approved"]).optional().default("all"),
+  status: z.enum(["all", "pending", "approved", "rejected"]).optional().default("all"),
   search: z.string().optional().default(""),
 })
 
@@ -28,11 +29,10 @@ export async function GET(request: NextRequest) {
     const adminUser = await prisma.user.findUnique({
       where: { 
         email: session.user.email,
-        role: "ADMIN"
       }
     })
 
-    if (!adminUser) {
+    if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 }
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const validationResult = VendorsQuerySchema.safeParse(queryParams)
     if (!validationResult.success) {
       return NextResponse.json(
-        { error: "Invalid query parameters" },
+        { error: "Invalid query parameters", details: validationResult.error.errors },
         { status: 400 }
       )
     }
@@ -68,35 +68,37 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
-    // Build where clause for vendor shops
-    let whereClause: any = {}
+    // Build where clause for database query
+    const whereClause: any = {
+      vendor: {
+        // Ensure we only get vendor users
+        role: "VENDOR"
+      }
+    }
 
-    // Filter by approval status
+    // Add status filter
     if (status === "pending") {
       whereClause.isApproved = false
     } else if (status === "approved") {
       whereClause.isApproved = true
+    } else if (status === "rejected") {
+      whereClause.isRejected = true
     }
 
-    // Search filter
+    // Add search filter
     if (search) {
       whereClause.OR = [
-        {
-          name: {
-            contains: search,
-            mode: 'insensitive' as const
-          }
-        },
-        {
-          vendor: {
-            email: {
-              contains: search,
-              mode: 'insensitive' as const
-            }
-          }
-        }
+        { name: { contains: search, mode: 'insensitive' } },
+        { vendor: { email: { contains: search, mode: 'insensitive' } } },
+        { vendor: { firstName: { contains: search, mode: 'insensitive' } } },
+        { vendor: { lastName: { contains: search, mode: 'insensitive' } } },
       ]
     }
+
+    // Get total count for pagination
+    const totalVendors = await prisma.vendorShop.count({
+      where: whereClause
+    })
 
     // Get vendor shops with pagination
     const vendorShops = await prisma.vendorShop.findMany({
@@ -117,12 +119,13 @@ export async function GET(request: NextRequest) {
           }
         }
       },
+      orderBy: {
+        vendor: {
+          createdAt: 'desc'
+        }
+      },
       skip,
-      take: limit,
-    })
-
-    const totalVendors = await prisma.vendorShop.count({
-      where: whereClause,
+      take: limit
     })
 
     // Transform vendor data
@@ -143,19 +146,31 @@ export async function GET(request: NextRequest) {
           })
           totalSales = salesData._sum.price || 0
         } catch (error) {
+          console.error("Error calculating sales:", error)
           totalSales = 0
+        }
+
+        // Determine status
+        let status: "pending" | "approved" | "rejected"
+        if (shop.isRejected) {
+          status = "rejected"
+        } else if (shop.isApproved) {
+          status = "approved"
+        } else {
+          status = "pending"
         }
 
         return {
           id: shop.id,
+          vendorId: shop.vendorId,
           name: shop.name,
           email: shop.vendor.email,
           description: shop.description || "No description provided",
           joinedDate: shop.vendor.createdAt.toISOString(),
           totalProducts: shop.products.length,
           totalSales: totalSales,
-          status: shop.isApproved ? "approved" as const : "pending" as const,
-          district: shop.district,
+          status: status,
+          district: shop.district || "Not specified",
           logo: shop.logo
         }
       })
@@ -184,18 +199,12 @@ export async function GET(request: NextRequest) {
     console.error("Admin vendors fetch error:", error)
     
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        success: false,
+        error: "Failed to fetch vendors",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
       { status: 500 }
     )
   }
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  })
 }
