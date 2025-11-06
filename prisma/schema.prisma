@@ -21,12 +21,14 @@ model User {
   updatedAt        DateTime     @updatedAt
   resetToken       String?
   resetTokenExpiry DateTime?
-  accounts         Account[]
-  orders           Order[]      @relation("CustomerOrders")
+  accounts         Account[]    
   products         Product[]    @relation("VendorProducts")
   sessions         Session[]
   profile          UserProfile?
   vendorShop       VendorShop?
+
+  customerOrders Order[] @relation("CustomerOrders")  
+  userOrders     Order[] @relation("UserOrders")      
 
   @@map("users")
 }
@@ -114,6 +116,8 @@ model Product {
 
 model Order {
   id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation("UserOrders", fields: [userId], references: [id])
   status          OrderStatus @default(PENDING)
   totalAmount     Float
   customerId      String
