@@ -114,7 +114,7 @@ export default function HomePage() {
                   variant="outline"
                   className="gap-2 border-2 border-white text-white hover:bg-white hover:text-foreground hover:scale-105 transition-all duration-300 text-base md:text-lg px-6 md:px-8 h-12 md:h-14 bg-transparent"
                 >
-                  <Link href="/vendor/register">
+                  <Link href="/register">
                     <Package className="h-4 w-4 md:h-5 md:w-5" />
                     Become a Vendor
                   </Link>
@@ -263,7 +263,7 @@ export default function HomePage() {
               variant="secondary"
               className="gap-2 bg-white text-primary hover:bg-white/90 hover:scale-105 hover:shadow-2xl transition-all duration-300 text-base md:text-lg px-8 md:px-10 h-14 md:h-16 mx-auto"
             >
-              <Link href="/vendor/register">
+              <Link href="/register">
                 <Package className="h-4 w-4 md:h-5 md:w-5" />
                 Become a Vendor Today
                 <ArrowRight className="h-4 w-4 md:h-5 md:w-5" />
