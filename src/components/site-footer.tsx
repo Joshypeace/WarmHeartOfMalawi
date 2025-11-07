@@ -85,11 +85,11 @@ export function SiteFooter() {
             <ul className="space-y-2 md:space-y-3 text-xs md:text-sm">
               <li className="flex items-center gap-2 text-muted-foreground">
                 <Mail className="h-3 w-3 md:h-4 md:w-4 shrink-0" />
-                <span className="truncate">info@wahea.mw</span>
+                <span className="truncate">blessingsmuyeya@gmail.com</span>
               </li>
               <li className="flex items-center gap-2 text-muted-foreground">
                 <Phone className="h-3 w-3 md:h-4 md:w-4 shrink-0" />
-                <span>+265 1 234 567</span>
+                <span>+265 993 232 373</span>
               </li>
               <li className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-3 w-3 md:h-4 md:w-4 shrink-0" />
