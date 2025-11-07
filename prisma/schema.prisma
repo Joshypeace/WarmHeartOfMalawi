@@ -118,13 +118,19 @@ model Product {
 
 model Order {
   id              String      @id @default(cuid())
+  orderNumber     String      @unique
   userId          String
   user            User        @relation("UserOrders", fields: [userId], references: [id])
   status          OrderStatus @default(PENDING)
   totalAmount     Float
+  subtotal        Float
+  shippingCost    Float
   customerId      String
-  shippingAddress String
+  shippingAddress String      // JSON string of address details
   district        String
+  shippingMethod  String      // courier service ID
+  paymentMethod   String      // mobile, card, cod
+  specialInstructions String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
@@ -132,7 +138,6 @@ model Order {
 
   @@map("orders")
 }
-
 model OrderItem {
   id        String  @id @default(cuid())
   quantity  Int

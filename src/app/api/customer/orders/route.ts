@@ -11,22 +11,29 @@ const OrdersQuerySchema = z.object({
   status: z.enum(["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
 })
 
+interface OrderItemResponse {
+  id: string
+  productName: string
+  quantity: number
+  price: number
+  productId: string
+  images: string[]
+}
+
 interface OrderResponse {
   id: string
+  orderNumber: string
   status: string
   totalAmount: number
-  shippingAddress: string
+  shippingCost: number
+  subtotal: number
+  shippingAddress: any
   district: string
+  shippingMethod: string
+  paymentMethod: string
   createdAt: string
   updatedAt: string
-  items: Array<{
-    id: string
-    productName: string
-    quantity: number
-    price: number
-    productId: string
-    images: string[]
-  }>
+  items: OrderItemResponse[]
 }
 
 interface OrdersResponse {
@@ -55,7 +62,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<OrdersResp
       )
     }
 
-    // Get user - allow any role that can have orders (CUSTOMER, VENDOR, ADMIN)
+    // Get user
     const user = await prisma.user.findUnique({
       where: { 
         email: session.user.email
@@ -101,9 +108,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<OrdersResp
 
     const skip = (page - 1) * limit
 
-    // Build where clause for orders
+    // Build where clause for orders - FIXED: using userId instead of customerId
     const whereClause: any = {
-      customerId: user.id,
+      userId: user.id, // This is the correct field based on your schema
     }
 
     if (status) {
@@ -143,10 +150,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<OrdersResp
       // Transform the data for frontend
       const transformedOrders: OrderResponse[] = orders.map(order => ({
         id: order.id,
+        orderNumber: order.orderNumber,
         status: order.status,
         totalAmount: order.totalAmount,
-        shippingAddress: order.shippingAddress,
+        shippingCost: order.shippingCost,
+        subtotal: order.subtotal,
+        shippingAddress: typeof order.shippingAddress === 'string' 
+          ? JSON.parse(order.shippingAddress) 
+          : order.shippingAddress,
         district: order.district,
+        shippingMethod: order.shippingMethod,
+        paymentMethod: order.paymentMethod,
         createdAt: order.createdAt.toISOString(),
         updatedAt: order.updatedAt.toISOString(),
         items: order.items.map(item => ({
@@ -178,12 +192,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<OrdersResp
         }
       }
 
-      return NextResponse.json(response)
+      return NextResponse.json(response, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      })
 
     } catch (dbError) {
-      // Handle case where customer has no orders (empty result is fine)
-      console.log('No orders found for customer:', user.id)
+      console.error('Database error:', dbError)
       
+      // Return empty orders for database errors
       const response: OrdersResponse = {
         success: true,
         data: {
