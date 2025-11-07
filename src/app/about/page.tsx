@@ -150,7 +150,7 @@ export default function AboutPage() {
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="border-2 hover:bg-primary/5 bg-transparent">
-                  <Link href="/register?role=vendor">
+                  <Link href="/register">
                     Become a Vendor
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
