@@ -219,11 +219,11 @@ export default function ShopPage() {
                     </h3>
                   </Link>
                   <p className="text-xs md:text-sm text-muted-foreground mb-2 line-clamp-2">{product.description}</p>
-                  <div className="flex items-center gap-1 mb-2">
+                  {/* <div className="flex items-center gap-1 mb-2">
                     <Star className="h-3 w-3 md:h-4 md:w-4 fill-primary text-primary" />
                     <span className="text-xs md:text-sm font-medium">{product.rating}</span>
                     <span className="text-xs md:text-sm text-muted-foreground">({product.reviews})</span>
-                  </div>
+                  </div> */}
                   <p className="text-xs md:text-sm text-muted-foreground truncate">by {product.vendorName}</p>
                 </CardContent>
                 <CardFooter className="p-3 md:p-4 pt-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
