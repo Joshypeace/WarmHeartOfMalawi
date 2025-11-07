@@ -71,11 +71,12 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) {
       addItem({
-        id: product.id,
         name: product.name,
         price: product.price,
         image: product.images[0] || '/placeholder.svg',
         vendorId: product.vendorId,
+        quantity: product.stock,
+        productId: product.id
       })
     }
     toast({

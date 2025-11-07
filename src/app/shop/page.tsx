@@ -53,11 +53,12 @@ export default function ShopPage() {
 
   const handleAddToCart = (product: any) => {
     addItem({
-      id: product.id,
       name: product.name,
       price: product.price,
       image: product.images[0] || '/placeholder.svg',
       vendorId: product.vendorId,
+      quantity: product.stock,
+      productId: product.id
     })
     toast({
       title: "Added to cart",
