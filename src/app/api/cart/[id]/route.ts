@@ -1,118 +1,120 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { prisma } from "@/lib/prisma"
-import { authOptions } from "@/lib/auth"
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> } // ✅ Fix for Next.js 14.2+
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params
+
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true }
-    })
+    const { quantity } = await request.json()
 
-    if (!user) {
+    if (typeof quantity !== 'number' || quantity < 1) {
       return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
-      )
-    }
-
-    const { id: cartItemId } = await context.params
-    const body = await request.json()
-    const { quantity } = body
-
-    if (typeof quantity !== "number" || quantity < 0) {
-      return NextResponse.json(
-        { success: false, error: "Invalid quantity" },
+        { success: false, error: 'Quantity must be a number and at least 1' },
         { status: 400 }
       )
     }
 
-    // If quantity is 0 → delete item
-    if (quantity === 0) {
-      const deleted = await prisma.cartItem.deleteMany({
-        where: { id: cartItemId, userId: user.id } // ✅ deleteMany instead of delete
-      })
-
-      if (deleted.count === 0) {
-        return NextResponse.json(
-          { success: false, error: "Cart item not found" },
-          { status: 404 }
-        )
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "Item removed from cart"
-      })
-    }
-
-    // Check stock
-    const cartItem = await prisma.cartItem.findFirst({
-      where: { id: cartItemId, userId: user.id },
+    // Get the cart item with product info to check stock
+    const existingCartItem = await prisma.cartItem.findFirst({
+      where: {
+        id,
+        userId: session.user.id,
+      },
       include: {
         product: {
-          select: { stockCount: true }
-        }
-      }
+          include: {
+            vendor: {
+              select: {
+                firstName: true,
+                lastName: true,
+                vendorShop: {
+                  select: { name: true },
+                },
+              },
+            },
+          },
+        },
+      },
     })
 
-    if (!cartItem) {
+    if (!existingCartItem) {
       return NextResponse.json(
-        { success: false, error: "Cart item not found" },
+        { success: false, error: 'Cart item not found' },
         { status: 404 }
       )
     }
 
-    const validQuantity = Math.min(quantity, cartItem.product.stockCount)
-
-    const updatedItem = await prisma.cartItem.update({
-      where: { id: cartItemId }, // ✅ only id is unique
-      data: { quantity: validQuantity },
-      include: {
-        product: {
-          select: {
-            name: true,
-            price: true,
-            images: true,
-            vendorId: true,
-            shop: { select: { name: true } }
-          }
-        }
-      }
-    })
-
-    const transformedItem = {
-      id: updatedItem.id,
-      productId: updatedItem.productId,
-      name: updatedItem.product.name,
-      price: updatedItem.product.price,
-      image: updatedItem.product.images?.[0] || "/placeholder.svg",
-      vendorId: updatedItem.product.vendorId,
-      vendorName: updatedItem.product.shop?.name || "Vendor",
-      quantity: updatedItem.quantity
+    // Check stock availability
+    if (existingCartItem.product.stockCount < quantity) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Only ${existingCartItem.product.stockCount} items available in stock`,
+        },
+        { status: 400 }
+      )
     }
 
-    return NextResponse.json({
-      success: true,
-      data: { item: transformedItem },
-      message: "Cart updated successfully"
+    // Update the cart item
+    const updatedCartItem = await prisma.cartItem.update({
+      where: { id },
+      data: { quantity },
+      include: {
+        product: {
+          include: {
+            vendor: {
+              select: {
+                firstName: true,
+                lastName: true,
+                vendorShop: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
     })
-  } catch (error) {
-    console.error("Cart update error:", error)
+
+    const responseItem = {
+      id: updatedCartItem.id,
+      productId: updatedCartItem.productId,
+      name: updatedCartItem.product.name,
+      price: updatedCartItem.product.price,
+      image: updatedCartItem.product.images[0] || '/placeholder.svg',
+      quantity: updatedCartItem.quantity,
+      vendorName:
+        updatedCartItem.product.vendor.vendorShop?.name ||
+        `${updatedCartItem.product.vendor.firstName} ${updatedCartItem.product.vendor.lastName}`,
+      inStock: updatedCartItem.product.inStock,
+      stockCount: updatedCartItem.product.stockCount,
+    }
+
+    return NextResponse.json({ success: true, item: responseItem })
+  } catch (error: any) {
+    console.error('Cart update error:', error)
+
+    if (error.code === 'P2025') {
+      return NextResponse.json(
+        { success: false, error: 'Cart item not found' },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json(
-      { success: false, error: "Failed to update cart" },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -120,50 +122,41 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> } // ✅ Fix for Next.js 14.2+
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params
+
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.email) {
+
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true }
+    // Verify the cart item belongs to the user before deleting
+    await prisma.cartItem.delete({
+      where: { id },
     })
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
-      )
-    }
-
-    const { id: cartItemId } = await context.params
-
-    const deleted = await prisma.cartItem.deleteMany({
-      where: { id: cartItemId, userId: user.id } // ✅ deleteMany fixes “invalid where” error
-    })
-
-    if (deleted.count === 0) {
-      return NextResponse.json(
-        { success: false, error: "Cart item not found" },
-        { status: 404 }
-      )
-    }
 
     return NextResponse.json({
       success: true,
-      message: "Item removed from cart"
+      message: 'Item removed from cart',
     })
-  } catch (error) {
-    console.error("Cart delete error:", error)
+  } catch (error: any) {
+    console.error('Cart delete error:', error)
+
+    if (error.code === 'P2025') {
+      return NextResponse.json(
+        { success: false, error: 'Cart item not found' },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json(
-      { success: false, error: "Failed to remove item from cart" },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }

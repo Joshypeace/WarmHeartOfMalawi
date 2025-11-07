@@ -70,14 +70,11 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
 
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) {
-      addItem({
-        name: product.name,
-        price: product.price,
-        image: product.images[0] || '/placeholder.svg',
-        vendorId: product.vendorId,
-        quantity: product.stock,
-        productId: product.id
-      })
+     addItem(String(product.id))
+    toast({
+      title: "Added to cart",
+      description: `${product.name} has been added to your cart.`,
+    })
     }
     toast({
       title: "Added to cart",

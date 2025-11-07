@@ -52,14 +52,8 @@ export default function ShopPage() {
   }, [])
 
   const handleAddToCart = (product: any) => {
-    addItem({
-      name: product.name,
-      price: product.price,
-      image: product.images[0] || '/placeholder.svg',
-      vendorId: product.vendorId,
-      quantity: product.stock,
-      productId: product.id
-    })
+    // addItem expects a product ID (string), so pass the id
+    addItem(String(product.id))
     toast({
       title: "Added to cart",
       description: `${product.name} has been added to your cart.`,
