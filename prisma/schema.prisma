@@ -28,7 +28,8 @@ model User {
   vendorShop       VendorShop?
 
   customerOrders Order[] @relation("CustomerOrders")  
-  userOrders     Order[] @relation("UserOrders")      
+  userOrders     Order[] @relation("UserOrders")
+  cartItems     CartItem[]      
 
   @@map("users")
 }
@@ -110,7 +111,8 @@ model Product {
   orderItems  OrderItem[]
   shop        VendorShop  @relation(fields: [shopId], references: [id], onDelete: Cascade)
   vendor      User        @relation("VendorProducts", fields: [vendorId], references: [id], onDelete: Cascade)
-
+  
+  cartItems    CartItem[]
   @@map("products")
 }
 
@@ -141,6 +143,21 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
 }
 
 model VerificationToken {
