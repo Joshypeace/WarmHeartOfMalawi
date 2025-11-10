@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ShoppingCart, User, Heart, Menu, Search, Sparkles, X, Store, Shield, MapPin, Package, Settings, BarChart3, Users, Home } from "lucide-react"
+import { ShoppingCart, User, Heart, Menu, Search, Sparkles, X, Store, Shield, MapPin, Package, Settings, BarChart3, Users, Home, CarTaxiFront } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
@@ -101,6 +101,7 @@ export function SiteHeader() {
         { href: "/admin/users", label: "User Management", icon: <Users className="h-4 w-4" /> },
         { href: "/admin/vendors", label: "Vendor Approvals", icon: <Store className="h-4 w-4" /> },
         { href: "/admin/analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+        { href: "/admin/categories", label: "Categories", icon: <CarTaxiFront className="h-4 w-4" /> },
       ],
       regional_admin: [
         { href: "/regional-admin/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },

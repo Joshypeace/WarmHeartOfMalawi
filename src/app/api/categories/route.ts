@@ -1,66 +1,54 @@
-// app/api/categories/route.ts
+// app/api/categories/route.ts - UPDATED VERSION
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all unique categories from products of approved vendors
-    const categories = await prisma.product.findMany({
+    // Get all active categories with product counts
+    const categories = await prisma.category.findMany({
       where: {
-        vendor: {
-          vendorShop: {
-            isApproved: true,
-            isRejected: false
+        isActive: true
+      },
+      include: {
+        _count: {
+          select: {
+            products: {
+              where: {
+                inStock: true,
+                vendor: {
+                  vendorShop: {
+                    isApproved: true,
+                    isRejected: false
+                  }
+                }
+              }
+            }
           }
-        },
-        inStock: true
+        }
       },
-      select: {
-        category: true,
-        images: true,
-        id: true
-      },
-      distinct: ['category']
+      orderBy: {
+        name: 'asc'
+      }
     })
 
-    // Get product counts for each category
-    const categoryCounts = await Promise.all(
-      categories.map(async (category) => {
-        const count = await prisma.product.count({
-          where: {
-            category: category.category,
-            vendor: {
-              vendorShop: {
-                isApproved: true,
-                isRejected: false
-              }
-            },
-            inStock: true
-          }
-        })
-
-        return {
-          name: category.category,
-          count,
-          image: category.images?.[0] || null,
-          productId: category.id
-        }
-      })
-    )
-
-    // Filter out categories with no products and sort by count (descending)
-    const sortedCategories = categoryCounts
-      .filter(cat => cat.count > 0)
-      .sort((a, b) => b.count - a.count)
+    // Transform the data
+    const result = categories.map(category => ({
+      id: category.id,
+      name: category.name,
+      description: category.description || `Explore our ${category.name.toLowerCase()} collection`,
+      image: category.image,
+      count: category._count.products
+    })).filter(cat => cat.count > 0) // Only show categories with products
 
     return NextResponse.json({
       success: true,
-      data: sortedCategories
+      data: result
     })
 
   } catch (error) {
+    console.error("Error loading categories:", error)
     return NextResponse.json(
-      { 
+      {
         success: false,
         error: "Failed to load categories"
       },

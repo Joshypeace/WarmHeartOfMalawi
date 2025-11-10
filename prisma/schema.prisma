@@ -113,7 +113,9 @@ model Product {
   orderItems  OrderItem[]
   shop        VendorShop  @relation(fields: [shopId], references: [id], onDelete: Cascade)
   vendor      User        @relation("VendorProducts", fields: [vendorId], references: [id], onDelete: Cascade)
-  
+  categoryId  String?  
+  categoryRef Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
   cartItems    CartItem[]
   @@map("products")
 }
@@ -174,6 +176,19 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  image       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  products    Product[]
+  
+  @@map("categories")
 }
 
 enum UserRole {
