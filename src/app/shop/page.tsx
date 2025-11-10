@@ -13,16 +13,20 @@ import { useCart } from "@/lib/cart-context"
 import { useToast } from "@/hooks/use-toast"
 import { useShopProducts } from "@/hooks/use-shop-products"
 
-interface Category {
+interface ManagedCategory {
+  id: string
   name: string
-  count: number
+  description: string | null
+  isActive: boolean
+  productCount: number
 }
 
 export default function ShopPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [sortBy, setSortBy] = useState("featured")
-  const [categories, setCategories] = useState<Category[]>([])
+  const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
   
   const { products, loading, error } = useShopProducts({
     search: searchQuery,
@@ -33,23 +37,31 @@ export default function ShopPage() {
   const { addItem } = useCart()
   const { toast } = useToast()
 
-  // Fetch categories on component mount
+  // Fetch managed categories on component mount
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await fetch('/api/shop/categories')
+        setCategoriesLoading(true)
+        const response = await fetch('/api/admin/categories')
         const data = await response.json()
         
         if (data.success) {
-          setCategories(data.data)
+          setManagedCategories(data.data.categories)
+        } else {
+          console.error('Failed to fetch categories:', data.error)
         }
       } catch (err) {
         console.error('Failed to fetch categories:', err)
+      } finally {
+        setCategoriesLoading(false)
       }
     }
 
     fetchCategories()
   }, [])
+
+  // Get active categories with products
+  const activeCategories = managedCategories.filter(cat => cat.isActive && cat.productCount > 0)
 
   const handleAddToCart = (product: any) => {
     addItem(String(product.id))
@@ -112,17 +124,28 @@ export default function ShopPage() {
             </div>
 
             <div className="flex gap-2 md:gap-3">
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory} disabled={categoriesLoading}>
                 <SelectTrigger className="flex-1 sm:w-[160px] md:w-[200px] h-10 md:h-11">
-                  <SelectValue placeholder="All Categories" />
+                  <SelectValue placeholder={categoriesLoading ? "Loading categories..." : "All Categories"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.name} value={category.name}>
-                      {category.name} ({category.count})
-                    </SelectItem>
-                  ))}
+                  {categoriesLoading ? (
+                    <div className="flex items-center justify-center py-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                      <span className="text-sm text-muted-foreground">Loading...</span>
+                    </div>
+                  ) : activeCategories.length === 0 ? (
+                    <div className="text-center py-2 text-sm text-muted-foreground">
+                      No categories available
+                    </div>
+                  ) : (
+                    activeCategories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name} ({category.productCount})
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
 

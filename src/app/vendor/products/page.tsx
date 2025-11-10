@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, Search, Edit, Trash2, Eye, Loader2, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,12 +13,55 @@ import Image from "next/image"
 import { useToast } from "@/hooks/use-toast"
 import { useVendorProducts } from "@/hooks/use-vendor-products"
 
+interface ManagedCategory {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  productCount: number
+}
+
 function VendorProductsContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [deletingProduct, setDeletingProduct] = useState<string | null>(null)
+  const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
   const { toast } = useToast()
   
   const { products, loading, error, deleteProduct } = useVendorProducts(searchQuery)
+
+  // Fetch managed categories
+  useEffect(() => {
+    const fetchManagedCategories = async () => {
+      try {
+        setCategoriesLoading(true)
+        const response = await fetch('/api/admin/categories')
+        const result = await response.json()
+        
+        if (result.success) {
+          setManagedCategories(result.data.categories)
+        } else {
+          console.error('Failed to fetch categories:', result.error)
+          setManagedCategories([])
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        setManagedCategories([])
+      } finally {
+        setCategoriesLoading(false)
+      }
+    }
+
+    fetchManagedCategories()
+  }, [])
+
+  // Helper function to get category name from ID
+  const getCategoryName = (categoryId: string) => {
+    if (!categoryId) return "Uncategorized"
+    
+    const category = managedCategories.find(cat => cat.id === categoryId)
+    return category ? category.name : "Uncategorized"
+  }
 
   const handleDelete = async (productId: string, productName: string) => {
     setDeletingProduct(productId)
@@ -173,7 +216,15 @@ function VendorProductsContent() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="capitalize">{product.category.toLowerCase()}</TableCell>
+                        <TableCell>
+                          {categoriesLoading ? (
+                            <div className="h-4 bg-muted rounded animate-pulse w-20"></div>
+                          ) : (
+                            <span className="capitalize">
+                              {getCategoryName(product.category).toLowerCase()}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="font-medium">
                           MWK {product.price.toLocaleString()}
                         </TableCell>

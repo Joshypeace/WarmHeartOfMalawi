@@ -22,11 +22,20 @@ interface Product {
   price: number
   images: string[]
   category: string
+  categoryId?: string
   inStock: boolean
   stockCount: number
   featured: boolean
   rating: number | null
   reviews: number | null
+}
+
+interface ManagedCategory {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  productCount: number
 }
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,6 +44,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [product, setProduct] = useState<Product | null>(null)
+  
+  // Managed categories state
+  const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
   
   // Properly unwrap the params Promise
   const resolvedParams = React.use(params)
@@ -45,7 +58,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     name: "",
     description: "",
     price: 0,
-    category: "",
+    category: "", // This will store category ID
     stockCount: 0,
     inStock: true,
     featured: false,
@@ -53,6 +66,31 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   })
 
   const [newImage, setNewImage] = useState("")
+
+  // Fetch managed categories
+  useEffect(() => {
+    const fetchManagedCategories = async () => {
+      try {
+        setCategoriesLoading(true)
+        const response = await fetch('/api/admin/categories')
+        const result = await response.json()
+        
+        if (result.success) {
+          setManagedCategories(result.data.categories)
+        } else {
+          console.error('Failed to fetch categories:', result.error)
+          setManagedCategories([])
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        setManagedCategories([])
+      } finally {
+        setCategoriesLoading(false)
+      }
+    }
+
+    fetchManagedCategories()
+  }, [])
 
   // Fetch product data
   useEffect(() => {
@@ -68,16 +106,21 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         const data = await response.json()
         
         if (data.success && data.data) {
-          setProduct(data.data.product)
+          const productData = data.data.product
+          setProduct(productData)
+          
+          // Use categoryId if available, otherwise fallback to category name
+          const categoryValue = productData.categoryId || productData.category
+          
           setFormData({
-            name: data.data.product.name,
-            description: data.data.product.description,
-            price: data.data.product.price,
-            category: data.data.product.category,
-            stockCount: data.data.product.stockCount,
-            inStock: data.data.product.inStock,
-            featured: data.data.product.featured || false,
-            images: data.data.product.images || []
+            name: productData.name,
+            description: productData.description,
+            price: productData.price,
+            category: categoryValue,
+            stockCount: productData.stockCount,
+            inStock: productData.inStock,
+            featured: productData.featured || false,
+            images: productData.images || []
           })
         } else {
           throw new Error(data.error || 'Product not found')
@@ -129,12 +172,21 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     try {
       setSaving(true)
       
+      // Find the category name from the ID for backward compatibility
+      const selectedCategory = managedCategories.find(cat => cat.id === formData.category)
+      
+      const updateData = {
+        ...formData,
+        category: selectedCategory?.name || formData.category, // Send name for backward compatibility
+        categoryId: formData.category // Send ID for new relation
+      }
+
       const response = await fetch(`/api/vendor/products/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(updateData)
       })
 
       const data = await response.json()
@@ -233,6 +285,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     placeholder="Enter product name"
                     required
+                    disabled={saving}
                   />
                 </div>
 
@@ -245,6 +298,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     placeholder="Enter product description"
                     rows={4}
                     required
+                    disabled={saving}
                   />
                 </div>
 
@@ -259,6 +313,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       onChange={(e) => handleInputChange('price', parseFloat(e.target.value))}
                       placeholder="0.00"
                       required
+                      disabled={saving}
                     />
                   </div>
 
@@ -271,28 +326,48 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       onChange={(e) => handleInputChange('stockCount', parseInt(e.target.value))}
                       placeholder="0"
                       required
+                      disabled={saving}
                     />
                   </div>
                 </div>
 
+                {/* Updated Category Select */}
                 <div className="space-y-2">
                   <Label htmlFor="category">Category</Label>
                   <Select
                     value={formData.category}
                     onValueChange={(value) => handleInputChange('category', value)}
+                    disabled={saving || categoriesLoading}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
+                      <SelectValue placeholder={categoriesLoading ? "Loading categories..." : "Select category"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="clothing">Clothing</SelectItem>
-                      <SelectItem value="electronics">Electronics</SelectItem>
-                      <SelectItem value="home-garden">Home & Garden</SelectItem>
-                      <SelectItem value="beauty">Beauty & Personal Care</SelectItem>
-                      <SelectItem value="sports">Sports & Outdoors</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {categoriesLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                          <span className="ml-2 text-sm text-muted-foreground">Loading categories...</span>
+                        </div>
+                      ) : managedCategories.length === 0 ? (
+                        <div className="text-center py-4 text-sm text-muted-foreground">
+                          No categories available
+                        </div>
+                      ) : (
+                        managedCategories
+                          .filter(category => category.isActive)
+                          .map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {!categoriesLoading && managedCategories.filter(cat => cat.isActive).length === 0 && (
+                    <p className="text-xs text-amber-600">
+                      No active categories available. Please contact administrator.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -312,8 +387,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                         value={newImage}
                         onChange={(e) => setNewImage(e.target.value)}
                         placeholder="https://example.com/image.jpg"
+                        disabled={saving}
                       />
-                      <Button type="button" onClick={handleAddImage}>
+                      <Button type="button" onClick={handleAddImage} disabled={saving}>
                         <Upload className="h-4 w-4" />
                       </Button>
                     </div>
@@ -337,6 +413,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                           size="icon"
                           className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => handleRemoveImage(index)}
+                          disabled={saving}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -360,6 +437,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       id="inStock"
                       checked={formData.inStock}
                       onCheckedChange={(checked) => handleInputChange('inStock', checked)}
+                      disabled={saving}
                     />
                   </div>
 
@@ -371,6 +449,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       id="featured"
                       checked={formData.featured}
                       onCheckedChange={(checked) => handleInputChange('featured', checked)}
+                      disabled={saving}
                     />
                   </div>
                 </CardContent>

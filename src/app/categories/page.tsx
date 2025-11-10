@@ -5,10 +5,50 @@ import { Package, ArrowRight, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useCategories } from "@/hooks/use-categories"
+import { useState, useEffect } from "react"
+
+interface ManagedCategory {
+  id: string
+  name: string
+  description: string | null
+  image: string | null
+  isActive: boolean
+  productCount: number
+}
 
 export default function CategoriesPage() {
-  const { categories, loading, error } = useCategories()
+  const [categories, setCategories] = useState<ManagedCategory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch managed categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const response = await fetch('/api/admin/categories')
+        const result = await response.json()
+        
+        if (result.success) {
+          // Filter only active categories with products
+          const activeCategories = result.data.categories.filter(
+            (cat: ManagedCategory) => cat.isActive && cat.productCount > 0
+          )
+          setCategories(activeCategories)
+        } else {
+          throw new Error(result.error || 'Failed to fetch categories')
+        }
+      } catch (err) {
+        console.error('Error fetching categories:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load categories')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   const categoryColors = [
     "from-primary to-accent",
@@ -74,8 +114,8 @@ export default function CategoriesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {categories.map((category, index) => (
                 <Link
-                  key={category.name}
-                  href={`/shop?category=${encodeURIComponent(category.name)}`}
+                  key={category.id}
+                  href={`/shop?category=${encodeURIComponent(category.id)}`}
                   className="group"
                 >
                   <Card className="overflow-hidden border-2 hover:border-primary/50 transition-all h-full">
@@ -96,10 +136,12 @@ export default function CategoriesPage() {
                         <Badge
                           className={`mb-3 bg-gradient-to-r ${categoryColors[index % categoryColors.length]} border-none shadow-lg`}
                         >
-                          {category.count} Products
+                          {category.productCount} Products
                         </Badge>
                         <h3 className="text-2xl font-bold text-white mb-2">{category.name}</h3>
-                        <p className="text-sm text-white/80 mb-4">{category.description}</p>
+                        <p className="text-sm text-white/80 mb-4">
+                          {category.description || `Explore our ${category.name.toLowerCase()} collection`}
+                        </p>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -122,6 +164,11 @@ export default function CategoriesPage() {
                 <p className="text-muted-foreground mb-6">
                   No product categories are currently available.
                 </p>
+                <Button asChild>
+                  <Link href="/shop">
+                    Browse All Products
+                  </Link>
+                </Button>
               </div>
             )}
           </>

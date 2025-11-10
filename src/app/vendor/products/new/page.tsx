@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Upload, Loader2, X, Image as ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,10 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 
-const categories = ["Crafts", "Food", "Textiles", "Art", "Jewelry", "Home Decor", "Clothing", "Accessories"]
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
 const MAX_IMAGES = 10 // Increased from 5 to 10
+
+interface ManagedCategory {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  productCount: number
+}
 
 function AddProductContent() {
   const router = useRouter()
@@ -25,13 +32,43 @@ function AddProductContent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [images, setImages] = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  
+  // Managed categories state
+  const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     price: "",
-    category: "",
+    category: "", // This will now store category ID
     stock: "",
   })
+
+  // Fetch managed categories
+  useEffect(() => {
+    const fetchManagedCategories = async () => {
+      try {
+        setCategoriesLoading(true)
+        const response = await fetch('/api/admin/categories')
+        const result = await response.json()
+        
+        if (result.success) {
+          setManagedCategories(result.data.categories)
+        } else {
+          console.error('Failed to fetch categories:', result.error)
+          setManagedCategories([])
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        setManagedCategories([])
+      } finally {
+        setCategoriesLoading(false)
+      }
+    }
+
+    fetchManagedCategories()
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -163,6 +200,13 @@ function AddProductContent() {
         imageUrls = await uploadImagesToServer(images)
       }
 
+      // Find the category name from the ID
+      const selectedCategory = managedCategories.find(cat => cat.id === formData.category)
+      
+      if (!selectedCategory) {
+        throw new Error("Please select a valid category")
+      }
+
       // Create product with backend API
       const response = await fetch("/api/vendor/products/new", {
         method: "POST",
@@ -171,6 +215,8 @@ function AddProductContent() {
         },
         body: JSON.stringify({
           ...formData,
+          category: selectedCategory.name, // Send category name for backward compatibility
+          categoryId: formData.category,   // Send category ID for new relation
           images: imageUrls,
         }),
       })
@@ -269,25 +315,43 @@ function AddProductContent() {
                 </p>
               </div>
 
-              {/* Category */}
+              {/* Category - Updated to use managed categories */}
               <div className="space-y-2">
                 <Label htmlFor="category">Category *</Label>
                 <Select
                   value={formData.category}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || categoriesLoading}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
+                    <SelectValue placeholder={categoriesLoading ? "Loading categories..." : "Select a category"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
+                    {categoriesLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        <span className="ml-2 text-sm text-muted-foreground">Loading categories...</span>
+                      </div>
+                    ) : managedCategories.length === 0 ? (
+                      <div className="text-center py-4 text-sm text-muted-foreground">
+                        No categories available. Please contact admin.
+                      </div>
+                    ) : (
+                      managedCategories
+                        .filter(category => category.isActive)
+                        .map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))
+                    )}
                   </SelectContent>
                 </Select>
+                {!categoriesLoading && managedCategories.filter(cat => cat.isActive).length === 0 && (
+                  <p className="text-xs text-amber-600">
+                    No active categories available. Please contact administrator.
+                  </p>
+                )}
               </div>
 
               {/* Price and Stock */}

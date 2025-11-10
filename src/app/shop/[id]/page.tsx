@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
@@ -15,9 +15,18 @@ import { useToast } from "@/hooks/use-toast"
 import { useProductDetail } from "@/hooks/use-product-detail"
 import React from "react"
 
+interface ManagedCategory {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  productCount: number
+}
+
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
+  const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
   const { addItem } = useCart()
   const { toast } = useToast()
   const router = useRouter()
@@ -27,6 +36,33 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const { id } = resolvedParams
 
   const { product, relatedProducts, loading, error } = useProductDetail(id)
+
+  // Fetch managed categories
+  useEffect(() => {
+    const fetchManagedCategories = async () => {
+      try {
+        const response = await fetch('/api/admin/categories')
+        const result = await response.json()
+        
+        if (result.success) {
+          setManagedCategories(result.data.categories)
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+      }
+    }
+
+    fetchManagedCategories()
+  }, [])
+
+  // Helper function to get category name
+  const getCategoryName = (categoryId: string | null, categoryName: string) => {
+    if (categoryId) {
+      const category = managedCategories.find(cat => cat.id === categoryId)
+      return category ? category.name : categoryName
+    }
+    return categoryName
+  }
 
   // Helper functions to handle null ratings
   const getDisplayRating = (rating: number | null) => {
@@ -101,6 +137,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     })
   }
 
+  // Get the proper category name
+  const displayCategory = getCategoryName( null, product.category)
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-4 md:py-6 lg:py-8 px-4 md:px-6 max-w-7xl mx-auto">
@@ -147,7 +186,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           <div className="flex flex-col">
             <div className="mb-4">
               <Badge variant="secondary" className="mb-2 text-xs md:text-sm">
-                {product.category}
+                {displayCategory}
               </Badge>
               <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-balance">{product.name}</h1>
               <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
