@@ -74,7 +74,7 @@ export async function GET(
       }
     })
 
-    // Transform the data to match your frontend interface
+    // ✅ USE REAL DATA FROM DATABASE
     const transformedProduct = {
       id: product.id,
       name: product.name,
@@ -83,10 +83,9 @@ export async function GET(
       images: product.images,
       category: product.category,
       inStock: product.inStock,
-      stock: product.stockCount, // Changed from stock to stockCount
-      featured: false, // You don't have this field in schema, so default to false
-      rating: 4.5, // You don't have rating field, so using default
-      reviews: 0, // You don't have reviews field, so using default
+      stock: product.stockCount,
+      rating: product.rating, // ✅ REAL RATING FROM DATABASE
+      reviews: product.reviews, // ✅ REAL REVIEWS COUNT FROM DATABASE
       vendorId: product.vendorId,
       vendorName: product.vendor.vendorShop?.name || `${product.vendor.firstName} ${product.vendor.lastName}`,
       vendorShop: product.shop ? {
@@ -100,6 +99,7 @@ export async function GET(
       updatedAt: product.updatedAt.toISOString()
     }
 
+    // ✅ USE REAL DATA FOR RELATED PRODUCTS TOO
     const transformedRelatedProducts = relatedProducts.map(rp => ({
       id: rp.id,
       name: rp.name,
@@ -108,9 +108,9 @@ export async function GET(
       images: rp.images,
       category: rp.category,
       inStock: rp.inStock,
-      stock: rp.stockCount, // Changed from stock to stockCount
-      rating: 4.5, // Default since not in schema
-      reviews: 0, // Default since not in schema
+      stock: rp.stockCount,
+      rating: rp.rating, // ✅ REAL RATING FROM DATABASE
+      reviews: rp.reviews, // ✅ REAL REVIEWS COUNT FROM DATABASE
       vendorId: rp.vendorId,
       vendorName: rp.shop?.name || `${rp.vendor.firstName} ${rp.vendor.lastName}`
     }))
@@ -132,7 +132,7 @@ export async function GET(
   }
 }
 
-// Your existing PUT method
+// Your existing PUT method (keep as is)
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -191,7 +191,7 @@ export async function PUT(
   }
 }
 
-// Your existing DELETE method
+// Your existing DELETE method (keep as is)
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }

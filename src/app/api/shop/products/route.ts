@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
-    // Build where clause - CORRECTED for your schema
+    // Build where clause
     const whereClause: any = {
       inStock: true,
       shop: {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       whereClause.vendorId = vendor
     }
 
-    // Build orderBy clause
+    // Build orderBy clause - ADD RATING SORTING
     let orderBy: any = { createdAt: 'desc' }
     
     switch (sortBy) {
@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
         break
       case 'newest':
         orderBy = { createdAt: 'desc' }
+        break
+      case 'rating':
+        orderBy = { rating: 'desc' } // Sort by actual rating field
         break
       case 'featured':
       default:
@@ -87,17 +90,12 @@ export async function GET(request: NextRequest) {
       })
     ])
 
-    // Transform product data - CORRECTED for your schema
+    // Transform product data - USE REAL DATA FROM DATABASE
     const transformedProducts = products.map(product => {
       // Use shop name first, fallback to vendor name
       const vendorName = product.shop?.name 
         || `${product.vendor?.firstName || ''} ${product.vendor?.lastName || ''}`.trim()
         || 'Vendor'
-
-      // Calculate rating and reviews
-      const baseRating = 4.0 + (Math.random() * 1.5)
-      const rating = parseFloat(baseRating.toFixed(1))
-      const reviews = Math.floor(Math.random() * 100) + 10
 
       return {
         id: product.id,
@@ -108,9 +106,8 @@ export async function GET(request: NextRequest) {
         category: product.category,
         inStock: product.inStock,
         stock: product.stockCount,
-        featured: false,
-        rating,
-        reviews,
+        rating: product.rating, // USE ACTUAL RATING FROM DATABASE
+        reviews: product.reviews, // USE ACTUAL REVIEWS COUNT FROM DATABASE
         vendorId: product.vendorId,
         vendorName,
         createdAt: product.createdAt.toISOString()

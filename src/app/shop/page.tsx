@@ -52,7 +52,6 @@ export default function ShopPage() {
   }, [])
 
   const handleAddToCart = (product: any) => {
-    // addItem expects a product ID (string), so pass the id
     addItem(String(product.id))
     toast({
       title: "Added to cart",
@@ -66,6 +65,27 @@ export default function ShopPage() {
   }
 
   const hasActiveFilters = searchQuery || selectedCategory !== "all"
+
+  // Format rating to show one decimal place, or "No ratings" if null
+  const formatRating = (rating: number | null) => {
+    return rating ? rating.toFixed(1) : "0.0"
+  }
+
+  // Format review count, show 0 if null
+  const formatReviewCount = (reviews: number | null) => {
+    return reviews || 0
+  }
+
+  // Show rating stars with proper styling for no ratings
+  const renderRatingStars = (rating: number | null) => {
+    const displayRating = rating || 0
+    return (
+      <div className="flex items-center gap-1">
+        <Star className={`h-3 w-3 md:h-4 md:w-4 ${displayRating > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+        <span className="text-xs md:text-sm font-medium">{formatRating(rating)}</span>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -220,16 +240,17 @@ export default function ShopPage() {
                   </Link>
                   <p className="text-xs md:text-sm text-muted-foreground mb-2 line-clamp-2">{product.description}</p>
                   <div className="flex items-center gap-1 mb-2">
-                    <Star className="h-3 w-3 md:h-4 md:w-4 fill-primary text-primary" />
-                    <span className="text-xs md:text-sm font-medium">{product.rating}</span>
-                    <span className="text-xs md:text-sm text-muted-foreground">({product.reviews})</span>
+                    {renderRatingStars(product.rating)}
+                    <span className="text-xs md:text-sm text-muted-foreground">
+                      ({formatReviewCount(product.reviews)} {product.reviews === 1 ? 'review' : 'reviews'})
+                    </span>
                   </div>
                   <p className="text-xs md:text-sm text-muted-foreground truncate">by {product.vendorName}</p>
                 </CardContent>
                 <CardFooter className="p-3 md:p-4 pt-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div className="w-full sm:w-auto">
                     <p className="text-xl md:text-2xl font-bold">MWK {product.price.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">{product.stock} in stock</p>
+                    <p className="text-xs text-muted-foreground">{product.stockCount} in stock</p>
                   </div>
                   <Button
                     onClick={() => handleAddToCart(product)}

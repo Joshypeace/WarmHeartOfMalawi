@@ -28,6 +28,25 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
   const { product, relatedProducts, loading, error } = useProductDetail(id)
 
+  // Helper functions to handle null ratings
+  const getDisplayRating = (rating: number | null) => {
+    return rating ? rating.toFixed(1) : "0.0"
+  }
+
+  const getDisplayReviews = (reviews: number | null) => {
+    return reviews || 0
+  }
+
+  const renderRatingStars = (rating: number | null) => {
+    const displayRating = rating || 0
+    return (
+      <div className="flex items-center gap-1">
+        <Star className={`h-4 w-4 md:h-5 md:w-5 ${displayRating > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+        <span className="font-medium text-sm md:text-base">{getDisplayRating(rating)}</span>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -132,11 +151,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </Badge>
               <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-balance">{product.name}</h1>
               <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
-                <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 md:h-5 md:w-5 fill-primary text-primary" />
-                  <span className="font-medium text-sm md:text-base">{product.rating}</span>
-                  <span className="text-muted-foreground text-xs md:text-sm">({product.reviews} reviews)</span>
-                </div>
+                {renderRatingStars(product.rating)}
+                <span className="text-muted-foreground text-xs md:text-sm">
+                  ({getDisplayReviews(product.reviews)} {getDisplayReviews(product.reviews) === 1 ? 'review' : 'reviews'})
+                </span>
               </div>
               <Link
                 href={`/vendors/${product.vendorId}`}
@@ -292,8 +310,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                       </h3>
                     </Link>
                     <div className="flex items-center gap-1 mb-1 md:mb-2">
-                      <Star className="h-3 w-3 md:h-4 md:w-4 fill-primary text-primary" />
-                      <span className="text-xs md:text-sm font-medium">{relatedProduct.rating}</span>
+                      <Star className={`h-3 w-3 md:h-4 md:w-4 ${(relatedProduct.rating || 0) > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+                      <span className="text-xs md:text-sm font-medium">
+                        {relatedProduct.rating ? relatedProduct.rating.toFixed(1) : "0.0"}
+                      </span>
                     </div>
                     <p className="text-sm md:text-base lg:text-lg font-bold">
                       MWK {relatedProduct.price.toLocaleString()}
