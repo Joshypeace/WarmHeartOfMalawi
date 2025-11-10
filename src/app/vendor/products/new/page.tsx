@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Upload, Loader2, X } from "lucide-react"
+import { ArrowLeft, Upload, Loader2, X, Image as ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 
-const categories = ["Crafts", "Food", "Textiles", "Art", "Jewelry"]
+const categories = ["Crafts", "Food", "Textiles", "Art", "Jewelry", "Home Decor", "Clothing", "Accessories"]
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+const MAX_IMAGES = 10 // Increased from 5 to 10
 
 function AddProductContent() {
   const router = useRouter()
@@ -74,12 +75,13 @@ function AddProductContent() {
       newPreviews.push(previewUrl)
     }
 
-    // Limit to 5 images maximum
+    // Check image limit
     const totalImages = images.length + newImages.length
-    if (totalImages > 5) {
+    if (totalImages > MAX_IMAGES) {
+      const allowedNewImages = MAX_IMAGES - images.length
       toast({
         title: "Too many images",
-        description: "You can upload up to 5 images maximum.",
+        description: `You can upload up to ${MAX_IMAGES} images maximum. ${allowedNewImages} more allowed.`,
         variant: "destructive",
       })
       return
@@ -126,15 +128,15 @@ function AddProductContent() {
   const uploadImagesToServer = async (files: File[]): Promise<string[]> => {
     if (files.length === 0) return []
 
-    const formData = new FormData()
+    const uploadFormData = new FormData()
     files.forEach(file => {
-      formData.append("images", file)
+      uploadFormData.append("images", file)
     })
 
     try {
       const response = await fetch("/api/upload", {
         method: "POST",
-        body: formData,
+        body: uploadFormData,
       })
 
       const result = await response.json()
@@ -211,7 +213,7 @@ function AddProductContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container max-w-3xl mx-auto px-4 md:px-6 py-8">
+      <div className="container max-w-4xl mx-auto px-4 md:px-6 py-8">
         <Button 
           variant="ghost" 
           onClick={() => router.back()} 
@@ -321,9 +323,15 @@ function AddProductContent() {
                 </div>
               </div>
 
-              {/* Product Images */}
-              <div className="space-y-2">
-                <Label htmlFor="images">Product Images</Label>
+              {/* Product Images - Enhanced Section */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="images">Product Images</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Upload up to {MAX_IMAGES} images. The first image will be used as the main display image.
+                  </p>
+                </div>
+                
                 <input
                   id="images"
                   ref={fileInputRef}
@@ -343,57 +351,133 @@ function AddProductContent() {
                   className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
                     ${isSubmitting 
                       ? "border-gray-300 bg-gray-50 cursor-not-allowed" 
+                      : images.length >= MAX_IMAGES
+                      ? "border-green-200 bg-green-50 cursor-not-allowed"
                       : "border-muted-foreground/25 hover:border-primary hover:bg-primary/5"
                     }`}
                 >
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-lg font-medium mb-2">
+                    {images.length >= MAX_IMAGES ? "Maximum images reached" : "Add Product Images"}
+                  </p>
                   <p className="text-sm text-muted-foreground mb-1">
-                    Click to upload or drag and drop
+                    {images.length >= MAX_IMAGES 
+                      ? `You've reached the maximum of ${MAX_IMAGES} images`
+                      : "Click to upload or drag and drop"
+                    }
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    PNG, JPG, WebP up to 10MB (max 5 images)
+                    PNG, JPG, WebP up to 10MB each
                   </p>
                   {images.length > 0 && (
                     <p className="text-sm text-green-600 mt-2 font-medium">
-                      {images.length} image(s) selected
+                      {images.length} of {MAX_IMAGES} images selected
                     </p>
                   )}
                 </div>
 
-                {/* Image Previews */}
+                {/* Enhanced Image Previews Grid */}
                 {imagePreviews.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
-                    {imagePreviews.map((preview, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg border"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => removeImage(index)}
-                          disabled={isSubmitting}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 rounded-b-lg truncate">
-                          {images[index]?.name}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium">Image Previews ({imagePreviews.length}/{MAX_IMAGES})</h3>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setImages([])
+                          setImagePreviews(prev => {
+                            prev.forEach(url => URL.revokeObjectURL(url))
+                            return []
+                          })
+                        }}
+                        disabled={isSubmitting}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Clear All
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {imagePreviews.map((preview, index) => (
+                        <div key={index} className="relative group">
+                          <div className="aspect-square rounded-lg border-2 overflow-hidden bg-muted">
+                            <img
+                              src={preview}
+                              alt={`Preview ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {index === 0 && (
+                              <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
+                                Main
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Image Info */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2">
+                            <p className="text-xs truncate">
+                              {images[index]?.name}
+                            </p>
+                            <p className="text-xs opacity-75">
+                              {(images[index]?.size / 1024 / 1024).toFixed(1)} MB
+                            </p>
+                          </div>
+
+                          {/* Remove Button */}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            onClick={() => removeImage(index)}
+                            disabled={isSubmitting}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+
+                          {/* Drag Handle (for future reordering) */}
+                          <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                            <ImageIcon className="h-3 w-3" />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                      
+                      {/* Add More Images Button */}
+                      {imagePreviews.length < MAX_IMAGES && (
+                        <div
+                          onClick={() => !isSubmitting && fileInputRef.current?.click()}
+                          className="aspect-square border-2 border-dashed border-muted-foreground/25 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground text-center px-2">
+                            Add More Images
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Image Tips */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-medium text-blue-900 mb-2">Image Tips</h4>
+                      <ul className="text-sm text-blue-800 space-y-1">
+                        <li>• First image will be the main display image</li>
+                        <li>• Use high-quality, well-lit photos</li>
+                        <li>• Show different angles of your product</li>
+                        <li>• Include close-ups of important details</li>
+                      </ul>
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Submit Button */}
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-6 border-t">
                 <Button 
                   type="submit" 
                   className="flex-1" 
+                  size="lg"
                   disabled={!isFormValid || isSubmitting}
                 >
                   {isSubmitting ? (
@@ -408,6 +492,7 @@ function AddProductContent() {
                 <Button 
                   type="button" 
                   variant="outline" 
+                  size="lg"
                   onClick={() => router.back()} 
                   disabled={isSubmitting}
                 >

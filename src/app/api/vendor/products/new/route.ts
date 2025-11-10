@@ -1,10 +1,11 @@
+// app/api/vendor/products/new/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
-// Updated validation schema for local image paths
+// Updated validation schema with increased image limit
 const CreateProductSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Product name too long"),
   description: z.string().min(1, "Description is required").max(2000, "Description too long"),
@@ -23,7 +24,7 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  images: z.array(z.string()).max(5, "Maximum 5 images allowed").default([]),
+  images: z.array(z.string()).max(10, "Maximum 10 images allowed").default([]), // Increased from 5 to 10
 })
 
 export async function POST(request: NextRequest) {
@@ -99,6 +100,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate images array
+    const validImages = Array.isArray(images) ? images.slice(0, 10) : [] // Ensure max 10 images
+
     // Create product in database
     const product = await prisma.product.create({
       data: {
@@ -108,28 +112,48 @@ export async function POST(request: NextRequest) {
         category,
         stockCount: stock,
         inStock: stock > 0,
-        images: images || [],
+        images: validImages,
         vendorId: user.id,
         shopId: user.vendorShop.id,
+        // featured: false, // Default to false, can be set later
+        // rating: null, // Initialize as null
+        // reviews: null, // Initialize as null
       },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        category: true,
-        stockCount: true,
-        inStock: true,
-        createdAt: true,
-        images: true,
+      include: {
+        vendor: {
+          select: {
+            firstName: true,
+            lastName: true,
+          }
+        },
+        shop: {
+          select: {
+            name: true
+          }
+        }
       }
     })
 
-    console.log(`Product created: ${product.id} by vendor: ${user.id}`)
+    console.log(`Product created: ${product.id} with ${validImages.length} images by vendor: ${user.id}`)
 
     return NextResponse.json({
       success: true,
-      message: "Product created successfully",
-      data: product
+      message: `Product created successfully with ${validImages.length} images`,
+      data: {
+        product: {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          category: product.category,
+          stockCount: product.stockCount,
+          inStock: product.inStock,
+          images: product.images,
+          // featured: product.featured,
+          vendorName: product.shop?.name || `${product.vendor.firstName} ${product.vendor.lastName}`,
+          createdAt: product.createdAt,
+        }
+      }
     }, { status: 201 })
 
   } catch (error) {
