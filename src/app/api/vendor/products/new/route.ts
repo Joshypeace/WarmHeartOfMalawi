@@ -5,7 +5,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
-// Updated validation schema with increased image limit
+// Updated validation schema with categoryId support
 const CreateProductSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Product name too long"),
   description: z.string().min(1, "Description is required").max(2000, "Description too long"),
@@ -16,7 +16,8 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  category: z.string().min(1, "Category is required"),
+  category: z.string().min(1, "Category is required"), // Category name for backward compatibility
+  categoryId: z.string().min(1, "Category ID is required"), // New field for managed categories
   stock: z.string().transform(val => {
     const parsed = parseInt(val)
     if (isNaN(parsed) || parsed < 0) {
@@ -24,7 +25,7 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  images: z.array(z.string()).max(10, "Maximum 10 images allowed").default([]), // Increased from 5 to 10
+  images: z.array(z.string()).max(10, "Maximum 10 images allowed").default([]),
 })
 
 export async function POST(request: NextRequest) {
@@ -85,7 +86,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { name, description, price, category, stock, images } = validationResult.data
+    const { name, description, price, category, categoryId, stock, images } = validationResult.data
+
+    // Verify that the category exists and is active
+    const categoryExists = await prisma.category.findFirst({
+      where: {
+        id: categoryId,
+        isActive: true
+      }
+    })
+
+    if (!categoryExists) {
+      return NextResponse.json(
+        { error: "Invalid category selected. Please choose a valid category." },
+        { status: 400 }
+      )
+    }
 
     // Check if vendor has reached product limit
     const productCount = await prisma.product.count({
@@ -101,23 +117,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate images array
-    const validImages = Array.isArray(images) ? images.slice(0, 10) : [] // Ensure max 10 images
+    const validImages = Array.isArray(images) ? images.slice(0, 10) : []
 
-    // Create product in database
+    // Create product in database with both category and categoryId
     const product = await prisma.product.create({
       data: {
         name,
         description,
         price,
-        category,
+        category, // Keep for backward compatibility
+        categoryId, // New field for managed categories
         stockCount: stock,
         inStock: stock > 0,
         images: validImages,
         vendorId: user.id,
         shopId: user.vendorShop.id,
-        // featured: false, // Default to false, can be set later
-        // rating: null, // Initialize as null
-        // reviews: null, // Initialize as null
+        // featured: false,
+        // rating: null,
+        // reviews: null,
       },
       include: {
         vendor: {
@@ -130,11 +147,17 @@ export async function POST(request: NextRequest) {
           select: {
             name: true
           }
+        },
+        categoryRef: {
+          select: {
+            id: true,
+            name: true
+          }
         }
       }
     })
 
-    console.log(`Product created: ${product.id} with ${validImages.length} images by vendor: ${user.id}`)
+    console.log(`Product created: ${product.id} with category "${product.categoryRef?.name}" by vendor: ${user.id}`)
 
     return NextResponse.json({
       success: true,
@@ -145,7 +168,8 @@ export async function POST(request: NextRequest) {
           name: product.name,
           description: product.description,
           price: product.price,
-          category: product.category,
+          category: product.categoryRef?.name || product.category, // Use managed category name if available
+          categoryId: product.categoryId,
           stockCount: product.stockCount,
           inStock: product.inStock,
           images: product.images,
@@ -159,11 +183,22 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Product creation error:", error)
 
-    if (error instanceof Error && error.message.includes("prisma")) {
-      return NextResponse.json(
-        { error: "Database error occurred while creating product" },
-        { status: 500 }
-      )
+    if (error instanceof Error) {
+      // Handle specific Prisma errors
+      if (error.message.includes("prisma") || error.message.includes("database")) {
+        return NextResponse.json(
+          { error: "Database error occurred while creating product" },
+          { status: 500 }
+        )
+      }
+      
+      // Handle foreign key constraint errors (invalid categoryId)
+      if (error.message.includes("foreign key constraint") || error.message.includes("categoryId")) {
+        return NextResponse.json(
+          { error: "Invalid category selected. Please choose a valid category." },
+          { status: 400 }
+        )
+      }
     }
 
     return NextResponse.json(

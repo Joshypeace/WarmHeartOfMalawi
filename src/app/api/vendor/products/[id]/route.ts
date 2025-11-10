@@ -1,6 +1,7 @@
 // src/app/api/vendor/products/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { z } from 'zod';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
@@ -14,6 +15,29 @@ interface SuccessResponse {
   message: string;
   data?: any;
 }
+
+// Validation schema for product updates
+const UpdateProductSchema = z.object({
+  name: z.string().min(1, "Product name is required").max(255, "Product name too long"),
+  description: z.string().min(1, "Description is required").max(2000, "Description too long"),
+  price: z.string().transform(val => {
+    const parsed = parseFloat(val)
+    if (isNaN(parsed) || parsed < 0) {
+      throw new Error("Price must be a valid positive number")
+    }
+    return parsed
+  }),
+  categoryId: z.string().min(1, "Category ID is required"), // Use categoryId instead of category
+  stockCount: z.string().transform(val => {
+    const parsed = parseInt(val)
+    if (isNaN(parsed) || parsed < 0) {
+      throw new Error("Stock count must be a valid non-negative number")
+    }
+    return parsed
+  }),
+  images: z.array(z.string()).max(10, "Maximum 10 images allowed").default([]),
+  inStock: z.boolean().default(true),
+});
 
 // GET - Fetch single product for editing
 export async function GET(
@@ -58,6 +82,15 @@ export async function GET(
             district: true,
             logo: true
           }
+        },
+        categoryRef: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            image: true,
+            isActive: true
+          }
         }
       }
     });
@@ -69,17 +102,24 @@ export async function GET(
       );
     }
 
-    // Transform the product data for the frontend
+    // Transform the product data for the frontend with category support
     const transformedProduct = {
       id: product.id,
       name: product.name,
       description: product.description,
       price: product.price,
       images: product.images || [],
-      category: product.category,
+      category: product.category, // Legacy field for backward compatibility
+      categoryId: product.categoryId, // Managed category reference
+      categoryData: product.categoryRef ? {
+        id: product.categoryRef.id,
+        name: product.categoryRef.name,
+        description: product.categoryRef.description,
+        image: product.categoryRef.image,
+        isActive: product.categoryRef.isActive
+      } : null,
       inStock: product.inStock,
       stockCount: product.stockCount,
-      // featured: product.featured || false,
       rating: product.rating,
       reviews: product.reviews,
       vendorId: product.vendorId,
@@ -135,30 +175,41 @@ export async function PUT(
     }
 
     const userId = session.user.id;
-    const body = await request.json();
 
-    // Validate required fields
-    const requiredFields = ['name', 'description', 'price', 'category', 'stockCount'];
-    const missingFields = requiredFields.filter(field => !body[field] && body[field] !== 0);
-    
-    if (missingFields.length > 0) {
+    // Parse and validate request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
       return NextResponse.json(
-        { error: `Missing required fields: ${missingFields.join(', ')}` },
+        { error: "Invalid JSON in request body" },
         { status: 400 }
       );
     }
 
-    // Validate price and stock count
-    if (body.price < 0) {
+    // Validate input data using schema
+    const validationResult = UpdateProductSchema.safeParse(body);
+    if (!validationResult.success) {
+      const errorMessages = validationResult.error.errors.map(err => err.message).join(", ");
       return NextResponse.json(
-        { error: 'Price must be a positive number' },
+        { error: `Validation failed: ${errorMessages}` },
         { status: 400 }
       );
     }
 
-    if (body.stockCount < 0) {
+    const { name, description, price, categoryId, stockCount, images, inStock } = validationResult.data;
+
+    // Verify that the category exists and is active
+    const category = await prisma.category.findFirst({
+      where: {
+        id: categoryId,
+        isActive: true
+      }
+    });
+
+    if (!category) {
       return NextResponse.json(
-        { error: 'Stock count must be a positive number' },
+        { error: "Invalid category selected or category is inactive. Please choose a valid category." },
         { status: 400 }
       );
     }
@@ -180,18 +231,18 @@ export async function PUT(
       );
     }
 
-    // Update the product
+    // Update the product with managed category support
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
       data: {
-        name: body.name,
-        description: body.description,
-        price: parseFloat(body.price),
-        category: body.category,
-        stockCount: parseInt(body.stockCount),
-        inStock: Boolean(body.inStock),
-        // featured: Boolean(body.featured),
-        images: Array.isArray(body.images) ? body.images : [],
+        name,
+        description,
+        price,
+        category: category.name, // Keep legacy field updated with category name
+        categoryId, // Update managed category reference
+        stockCount,
+        inStock: stockCount > 0,
+        images: Array.isArray(images) ? images : [],
         updatedAt: new Date()
       },
       include: {
@@ -205,21 +256,35 @@ export async function PUT(
           select: {
             name: true
           }
+        },
+        categoryRef: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            image: true
+          }
         }
       }
     });
 
-    // Transform the response
+    // Transform the response with category data
     const transformedProduct = {
       id: updatedProduct.id,
       name: updatedProduct.name,
       description: updatedProduct.description,
       price: updatedProduct.price,
       images: updatedProduct.images,
-      category: updatedProduct.category,
+      category: updatedProduct.categoryRef?.name || updatedProduct.category, // Prefer managed category name
+      categoryId: updatedProduct.categoryId,
+      categoryData: updatedProduct.categoryRef ? {
+        id: updatedProduct.categoryRef.id,
+        name: updatedProduct.categoryRef.name,
+        description: updatedProduct.categoryRef.description,
+        image: updatedProduct.categoryRef.image
+      } : null,
       inStock: updatedProduct.inStock,
       stockCount: updatedProduct.stockCount,
-      // featured: updatedProduct.featured,
       rating: updatedProduct.rating,
       reviews: updatedProduct.reviews,
       vendorId: updatedProduct.vendorId,
@@ -240,6 +305,16 @@ export async function PUT(
     
     const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     
+    // Handle specific Prisma errors
+    if (error instanceof Error) {
+      if (error.message.includes("foreign key constraint") || error.message.includes("categoryId")) {
+        return NextResponse.json(
+          { error: "Invalid category selected. Please choose a valid category." },
+          { status: 400 }
+        );
+      }
+    }
+    
     return NextResponse.json(
       { 
         error: 'Failed to update product',
@@ -250,7 +325,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete product (your existing code with minor improvements)
+// DELETE - Delete product
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }

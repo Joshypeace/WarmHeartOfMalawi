@@ -32,9 +32,18 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Add category filter
+    // Add category filter - UPDATED FOR MANAGED CATEGORIES
     if (category) {
-      whereClause.category = category
+      // Check if category is a valid UUID (category ID) or a string (category name)
+      const isCategoryId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(category)
+      
+      if (isCategoryId) {
+        // Filter by categoryId for managed categories
+        whereClause.categoryId = category
+      } else {
+        // Filter by category name for backward compatibility
+        whereClause.category = category
+      }
     }
 
     // Add vendor filter
@@ -42,7 +51,7 @@ export async function GET(request: NextRequest) {
       whereClause.vendorId = vendor
     }
 
-    // Build orderBy clause - ADD RATING SORTING
+    // Build orderBy clause
     let orderBy: any = { createdAt: 'desc' }
     
     switch (sortBy) {
@@ -56,7 +65,7 @@ export async function GET(request: NextRequest) {
         orderBy = { createdAt: 'desc' }
         break
       case 'rating':
-        orderBy = { rating: 'desc' } // Sort by actual rating field
+        orderBy = { rating: 'desc' }
         break
       case 'featured':
       default:
@@ -64,7 +73,7 @@ export async function GET(request: NextRequest) {
         break
     }
 
-    // Get products with CORRECT relations for your schema
+    // Get products with category relation
     const [totalProducts, products] = await Promise.all([
       prisma.product.count({ where: whereClause }),
       prisma.product.findMany({
@@ -82,6 +91,12 @@ export async function GET(request: NextRequest) {
               firstName: true,
               lastName: true
             }
+          },
+          categoryRef: {
+            select: {
+              id: true,
+              name: true
+            }
           }
         },
         orderBy,
@@ -90,12 +105,15 @@ export async function GET(request: NextRequest) {
       })
     ])
 
-    // Transform product data - USE REAL DATA FROM DATABASE
+    // Transform product data
     const transformedProducts = products.map(product => {
       // Use shop name first, fallback to vendor name
       const vendorName = product.shop?.name 
         || `${product.vendor?.firstName || ''} ${product.vendor?.lastName || ''}`.trim()
         || 'Vendor'
+
+      // Use managed category name if available, otherwise fallback to category string
+      const displayCategory = product.categoryRef?.name || product.category
 
       return {
         id: product.id,
@@ -103,14 +121,17 @@ export async function GET(request: NextRequest) {
         description: product.description,
         price: product.price,
         images: product.images || ['/placeholder.svg'],
-        category: product.category,
+        category: displayCategory, // Use proper category name
+        categoryId: product.categoryId, // Include categoryId for frontend
         inStock: product.inStock,
         stock: product.stockCount,
-        rating: product.rating, // USE ACTUAL RATING FROM DATABASE
-        reviews: product.reviews, // USE ACTUAL REVIEWS COUNT FROM DATABASE
+        rating: product.rating,
+        reviews: product.reviews,
         vendorId: product.vendorId,
         vendorName,
-        createdAt: product.createdAt.toISOString()
+        // featured: product.featured || false,
+        createdAt: product.createdAt.toISOString(),
+        updatedAt: product.updatedAt.toISOString()
       }
     })
 
