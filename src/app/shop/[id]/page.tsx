@@ -13,14 +13,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCart } from "@/lib/cart-context"
 import { useToast } from "@/hooks/use-toast"
 import { useProductDetail } from "@/hooks/use-product-detail"
+import React from "react"
 
-export default function ProductDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params
+export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
   const { addItem } = useCart()
   const { toast } = useToast()
   const router = useRouter()
+
+  // Properly unwrap the params Promise
+  const resolvedParams = React.use(params)
+  const { id } = resolvedParams
 
   const { product, relatedProducts, loading, error } = useProductDetail(id)
 
@@ -70,11 +74,7 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
 
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) {
-     addItem(String(product.id))
-    toast({
-      title: "Added to cart",
-      description: `${product.name} has been added to your cart.`,
-    })
+      addItem(String(product.id))
     }
     toast({
       title: "Added to cart",

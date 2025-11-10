@@ -63,7 +63,26 @@ export function useProductDetail(productId: string) {
         setError(null)
         
         const response = await fetch(`/api/shop/products/${productId}`)
-        const data: ApiResponse = await response.json()
+        
+        // Check if response is OK and has content
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        // Check if response has content
+        const contentLength = response.headers.get('content-length')
+        if (contentLength === '0') {
+          throw new Error('Empty response from server')
+        }
+        
+        const text = await response.text()
+        
+        // Check if response text is empty
+        if (!text) {
+          throw new Error('Empty response body')
+        }
+        
+        const data: ApiResponse = JSON.parse(text)
 
         if (data.success && data.data) {
           setProduct(data.data.product)
@@ -72,6 +91,7 @@ export function useProductDetail(productId: string) {
           throw new Error(data.error || 'Product not found')
         }
       } catch (err) {
+        console.error('Error fetching product:', err)
         setError(err instanceof Error ? err.message : 'Failed to load product')
         setProduct(null)
         setRelatedProducts([])
@@ -82,6 +102,9 @@ export function useProductDetail(productId: string) {
 
     if (productId) {
       fetchProductDetail()
+    } else {
+      setLoading(false)
+      setError('No product ID provided')
     }
   }, [productId])
 
