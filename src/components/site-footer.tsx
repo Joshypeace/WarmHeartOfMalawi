@@ -51,29 +51,16 @@ export function SiteFooter() {
             <h3 className="font-semibold mb-3 md:mb-4 text-sm md:text-base">For Vendors</h3>
             <ul className="space-y-2 text-xs md:text-sm">
               <li>
-                <Link href="/vendor/register" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/register" className="text-muted-foreground hover:text-foreground transition-colors">
                   Become a Vendor
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/vendor/dashboard"
+                  href="/register"
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Vendor Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/vendor/guidelines"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Seller Guidelines
-                </Link>
-              </li>
-              <li>
-                <Link href="/vendor/support" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Vendor Support
                 </Link>
               </li>
             </ul>

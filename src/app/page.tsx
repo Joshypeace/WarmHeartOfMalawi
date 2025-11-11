@@ -200,7 +200,7 @@ export default function HomePage() {
               {featuredProducts.map((product, index) => (
                 <Link
                   key={product.id}
-                  href={`/shop/${product.id}`}
+                  href={`#`}
                   className="animate-slide-up"
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
