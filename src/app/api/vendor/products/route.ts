@@ -14,7 +14,8 @@ interface ProductResponse {
   name: string;
   description: string;
   price: number;
-  category: string;
+  category: string; // Legacy field - category name
+  categoryId: string | null; // New field - managed category ID
   images: string[];
   stockCount: number;
   inStock: boolean;
@@ -52,9 +53,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
       ];
     }
 
-    // Get vendor's products
+    // Get vendor's products with category relation
     const products = await prisma.product.findMany({
       where: whereClause,
+      include: {
+        categoryRef: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true
+          }
+        }
+      },
       orderBy: {
         createdAt: 'desc',
       },
@@ -66,7 +76,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
       name: product.name,
       description: product.description,
       price: product.price,
-      category: product.category,
+      category: product.categoryRef?.name || product.category || "Uncategorized", // Use managed category name if available
+      categoryId: product.categoryId, // Include the managed category ID
       images: product.images,
       stockCount: product.stockCount,
       inStock: product.inStock,

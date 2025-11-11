@@ -9,6 +9,7 @@ interface Product {
   category: string;
   images: string[];
   stockCount: number;
+  categoryId: string | null;
   inStock: boolean;
   createdAt: string;
   updatedAt: string;

@@ -56,12 +56,12 @@ function VendorProductsContent() {
   }, [])
 
   // Helper function to get category name from ID
-  const getCategoryName = (categoryId: string) => {
-    if (!categoryId) return "Uncategorized"
-    
-    const category = managedCategories.find(cat => cat.id === categoryId)
-    return category ? category.name : "Uncategorized"
-  }
+ const getCategoryName = (categoryId: string | null) => {
+  if (!categoryId) return "Uncategorized"
+  
+  const category = managedCategories.find(cat => cat.id === categoryId)
+  return category ? category.name : "Uncategorized"
+}
 
   const handleDelete = async (productId: string, productName: string) => {
     setDeletingProduct(productId)
@@ -216,14 +216,14 @@ function VendorProductsContent() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {categoriesLoading ? (
-                            <div className="h-4 bg-muted rounded animate-pulse w-20"></div>
-                          ) : (
-                            <span className="capitalize">
-                              {getCategoryName(product.category).toLowerCase()}
-                            </span>
-                          )}
+                       <TableCell>
+                           {categoriesLoading ? (
+                          <div className="h-4 bg-muted rounded animate-pulse w-20"></div>
+                     ) : (
+                     <span className="capitalize">
+                            {getCategoryName(product.categoryId).toLowerCase()}
+                             </span>
+                           )}
                         </TableCell>
                         <TableCell className="font-medium">
                           MWK {product.price.toLocaleString()}
