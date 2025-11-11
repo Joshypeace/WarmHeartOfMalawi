@@ -8,11 +8,11 @@ import { authOptions } from '@/lib/auth'
 const UpdateCategorySchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional().nullable(),
-  image: z.string().url().optional().nullable(),
+  image: z.string().optional().nullable(),
   isActive: z.boolean().optional()
 })
 
-// GET - Get single category
+// GET - Get single category (Now accessible to all authenticated users)
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -20,14 +20,20 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    // Allow any authenticated user to read categories
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await context.params
 
+    // For non-admin users, only allow access to active categories
+    const whereClause = session.user.role !== 'ADMIN' 
+      ? { id, isActive: true }
+      : { id }
+
     const category = await prisma.category.findUnique({
-      where: { id },
+      where: whereClause,
       include: {
         _count: {
           select: {
@@ -48,7 +54,13 @@ export async function GET(
       success: true,
       data: {
         category: {
-          ...category,
+          id: category.id,
+          name: category.name,
+          description: category.description,
+          image: category.image,
+          isActive: category.isActive,
+          createdAt: category.createdAt,
+          updatedAt: category.updatedAt,
           productCount: category._count.products
         }
       }
@@ -63,7 +75,7 @@ export async function GET(
   }
 }
 
-// PUT - Update category
+// PUT, PATCH, DELETE - Keep these admin-only
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -71,6 +83,7 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions)
     
+    // Only admins can update categories
     if (!session?.user || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -126,7 +139,17 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       message: 'Category updated successfully',
-      data: { category: updatedCategory }
+      data: { 
+        category: {
+          id: updatedCategory.id,
+          name: updatedCategory.name,
+          description: updatedCategory.description,
+          image: updatedCategory.image,
+          isActive: updatedCategory.isActive,
+          createdAt: updatedCategory.createdAt,
+          updatedAt: updatedCategory.updatedAt
+        }
+      }
     })
 
   } catch (error) {
@@ -138,7 +161,7 @@ export async function PUT(
   }
 }
 
-// PATCH - Partial update (for status toggle)
+// PATCH - Partial update (for status toggle) - Admin only
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -172,7 +195,17 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       message: 'Category updated successfully',
-      data: { category: updatedCategory }
+      data: { 
+        category: {
+          id: updatedCategory.id,
+          name: updatedCategory.name,
+          description: updatedCategory.description,
+          image: updatedCategory.image,
+          isActive: updatedCategory.isActive,
+          createdAt: updatedCategory.createdAt,
+          updatedAt: updatedCategory.updatedAt
+        }
+      }
     })
 
   } catch (error) {
@@ -184,7 +217,7 @@ export async function PATCH(
   }
 }
 
-// DELETE - Delete category
+// DELETE - Delete category - Admin only
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
