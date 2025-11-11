@@ -15,6 +15,7 @@ interface User {
   district?: string | null;
   vendorShop?: any;
   isApproved?: boolean;
+  phone?: string | null;
 }
 
 interface AuthContextType {
@@ -22,12 +23,13 @@ interface AuthContextType {
   login: (email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  updateUser: (updatedUser: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
 
@@ -47,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         district: session.user.district,
         vendorShop: session.user.vendorShop,
         isApproved: session.user.isApproved,
+        phone: session.user.phone,
       });
     } else {
       setUser(null);
@@ -76,6 +79,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
+  const updateUser = (updatedUser: Partial<User>) => {
+    if (user) {
+      const newUser = { ...user, ...updatedUser };
+      setUser(newUser);
+      
+      // Also update the session if needed
+      updateSession({
+        ...session,
+        user: {
+          ...session?.user,
+          ...updatedUser
+        }
+      });
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -83,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         isLoading: status === "loading",
+        updateUser,
       }}
     >
       {children}
