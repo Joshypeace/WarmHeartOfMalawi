@@ -111,7 +111,7 @@ export function SiteHeader() {
       ],
       customer: [
         { href: "/customer/orders", label: "My Orders", icon: <Package className="h-4 w-4" /> },
-        // { href: "/customer/wishlist", label: "Wishlist", icon: <Heart className="h-4 w-4" /> },
+        { href: "/customer/wishlist", label: "Wishlist", icon: <Heart className="h-4 w-4" /> },
         // { href: "/customer/addresses", label: "Addresses", icon: <MapPin className="h-4 w-4" /> },
       ]
     }
