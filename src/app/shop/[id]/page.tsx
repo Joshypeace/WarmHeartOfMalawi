@@ -23,6 +23,113 @@ interface ManagedCategory {
   productCount: number
 }
 
+// Wishlist Button Component
+function ProductWishlistButton({ productId, productName }: { productId: string, productName: string }) {
+  const [isInWishlist, setIsInWishlist] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
+
+  // Check if product is in wishlist
+  useEffect(() => {
+    const checkWishlistStatus = async () => {
+      try {
+        const response = await fetch('/api/customer/wishlist')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            const inWishlist = result.data.wishlistItems.some(
+              (item: any) => item.product.id === productId
+            )
+            setIsInWishlist(inWishlist)
+          }
+        }
+      } catch (error) {
+        console.error('Error checking wishlist status:', error)
+      }
+    }
+
+    checkWishlistStatus()
+  }, [productId])
+
+  const toggleWishlist = async () => {
+    setLoading(true)
+    
+    try {
+      if (isInWishlist) {
+        // Remove from wishlist - we need to get the wishlist item ID first
+        const wishlistResponse = await fetch('/api/customer/wishlist')
+        if (wishlistResponse.ok) {
+          const wishlistResult = await wishlistResponse.json()
+          if (wishlistResult.success) {
+            const wishlistItem = wishlistResult.data.wishlistItems.find(
+              (item: any) => item.product.id === productId
+            )
+            
+            if (wishlistItem) {
+              await fetch(`/api/customer/wishlist/${wishlistItem.id}`, {
+                method: 'DELETE'
+              })
+              setIsInWishlist(false)
+              toast({
+                title: "Removed from wishlist",
+                description: `${productName} removed from your wishlist`,
+              })
+            }
+          }
+        }
+      } else {
+        // Add to wishlist
+        const response = await fetch('/api/customer/wishlist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ productId }),
+        })
+
+        const result = await response.json()
+
+        if (response.ok && result.success) {
+          setIsInWishlist(true)
+          toast({
+            title: "Added to wishlist",
+            description: `${productName} added to your wishlist`,
+          })
+        } else {
+          throw new Error(result.error || 'Failed to add to wishlist')
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling wishlist:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update wishlist",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      onClick={toggleWishlist}
+      disabled={loading}
+      className={`h-11 w-11 md:h-12 md:w-12 shrink-0 ${
+        isInWishlist 
+          ? "text-red-500 border-red-200 bg-red-50 hover:bg-red-100 hover:text-red-600" 
+          : "bg-transparent"
+      }`}
+    >
+      <Heart 
+        className={`h-4 w-4 md:h-5 md:w-5 ${isInWishlist ? "fill-current" : ""}`} 
+      />
+    </Button>
+  )
+}
+
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
@@ -138,7 +245,33 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   }
 
   // Get the proper category name
-  const displayCategory = getCategoryName( null, product.category)
+  const displayCategory = getCategoryName(null, product.category)
+
+  // Share product function
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: product.description,
+          url: window.location.href,
+        })
+        toast({
+          title: "Shared successfully",
+          description: "Product link has been shared",
+        })
+      } catch (error) {
+        console.error('Error sharing:', error)
+      }
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(window.location.href)
+      toast({
+        title: "Link copied",
+        description: "Product link copied to clipboard",
+      })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -252,10 +385,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                 {product.inStock && product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
               </Button>
-              <Button variant="outline" size="icon" className="h-11 w-11 md:h-12 md:w-12 shrink-0 bg-transparent">
-                <Heart className="h-4 w-4 md:h-5 md:w-5" />
-              </Button>
-              <Button variant="outline" size="icon" className="h-11 w-11 md:h-12 md:w-12 shrink-0 bg-transparent">
+              
+              {/* Wishlist Button */}
+              <ProductWishlistButton 
+                productId={product.id} 
+                productName={product.name}
+              />
+              
+              {/* Share Button */}
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-11 w-11 md:h-12 md:w-12 shrink-0 bg-transparent"
+                onClick={handleShare}
+              >
                 <Share2 className="h-4 w-4 md:h-5 md:w-5" />
               </Button>
             </div>
