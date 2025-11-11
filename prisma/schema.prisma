@@ -29,7 +29,8 @@ model User {
 
   customerOrders Order[] @relation("CustomerOrders")  
   userOrders     Order[] @relation("UserOrders")
-  cartItems     CartItem[]      
+  cartItems     CartItem[]     
+  wishlists     Wishlist[] 
 
   @@map("users")
 }
@@ -117,6 +118,7 @@ model Product {
   categoryRef Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   cartItems    CartItem[]
+  wishlists    Wishlist[]
   @@map("products")
 }
 
@@ -189,6 +191,20 @@ model Category {
   products    Product[]
   
   @@map("categories")
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  customerId String
+  productId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer User @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId])
+  @@map("wishlists")
 }
 
 enum UserRole {
