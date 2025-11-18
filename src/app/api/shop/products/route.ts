@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
         reviews: product.reviews,
         vendorId: product.vendorId,
         vendorName,
-        // featured: product.featured || false,
+        featured: product.featured || false,
         createdAt: product.createdAt.toISOString(),
         updatedAt: product.updatedAt.toISOString()
       }

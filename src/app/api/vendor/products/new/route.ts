@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
           stockCount: product.stockCount,
           inStock: product.inStock,
           images: product.images,
-          // featured: product.featured,
+          featured: product.featured,
           vendorName: product.shop?.name || `${product.vendor.firstName} ${product.vendor.lastName}`,
           createdAt: product.createdAt,
         }
