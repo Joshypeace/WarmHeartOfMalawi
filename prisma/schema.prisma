@@ -109,6 +109,7 @@ model Product {
   shopId      String
   rating      Float       @default(0.0)
   reviews     Int         @default(0)
+  featured    Boolean     @default(false)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   orderItems  OrderItem[]
