@@ -1,4 +1,3 @@
-// app/api/shop/products/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
@@ -10,13 +9,16 @@ export async function GET(request: NextRequest) {
     const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '12')))
     const search = searchParams.get('search') || ''
     const category = searchParams.get('category') || ''
-    const vendor = searchParams.get('vendor') || ''
-    const sortBy = searchParams.get('sort') || 'featured'
+    const sort = searchParams.get('sort') || 'featured'
+    const sizes = searchParams.get('sizes')?.split(',').filter(Boolean) || []
+    const colors = searchParams.get('colors')?.split(',').filter(Boolean) || []
+    const materials = searchParams.get('materials')?.split(',').filter(Boolean) || []
+    const brands = searchParams.get('brands')?.split(',').filter(Boolean) || []
 
     const skip = (page - 1) * limit
 
-    // Build where clause
-    const whereClause: any = {
+    // Build where clause - MATCHING YOUR SCHEMA
+    const where: any = {
       inStock: true,
       shop: {
         isApproved: true,
@@ -24,37 +26,48 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Add search filter
+    // Search filter
     if (search) {
-      whereClause.OR = [
+      where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    // Add category filter - UPDATED FOR MANAGED CATEGORIES
+    // Category filter
     if (category) {
-      // Check if category is a valid UUID (category ID) or a string (category name)
       const isCategoryId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(category)
       
       if (isCategoryId) {
-        // Filter by categoryId for managed categories
-        whereClause.categoryId = category
+        where.categoryId = category
       } else {
-        // Filter by category name for backward compatibility
-        whereClause.category = category
+        where.category = category
       }
     }
 
-    // Add vendor filter
-    if (vendor) {
-      whereClause.vendorId = vendor
+    // Size filter
+    if (sizes.length > 0) {
+      where.size = { in: sizes }
     }
 
-    // Build orderBy clause
-    let orderBy: any = { createdAt: 'desc' }
-    
-    switch (sortBy) {
+    // Color filter
+    if (colors.length > 0) {
+      where.color = { in: colors }
+    }
+
+    // Material filter
+    if (materials.length > 0) {
+      where.material = { in: materials }
+    }
+
+    // Brand filter
+    if (brands.length > 0) {
+      where.brand = { in: brands }
+    }
+
+    // Build orderBy
+    let orderBy: any = {}
+    switch (sort) {
       case 'price-low':
         orderBy = { price: 'asc' }
         break
@@ -67,17 +80,22 @@ export async function GET(request: NextRequest) {
       case 'rating':
         orderBy = { rating: 'desc' }
         break
+      case 'name-asc':
+        orderBy = { name: 'asc' }
+        break
+      case 'name-desc':
+        orderBy = { name: 'desc' }
+        break
       case 'featured':
       default:
-        orderBy = { createdAt: 'desc' }
+        orderBy = [{ featured: 'desc' }, { createdAt: 'desc' }]
         break
     }
 
-    // Get products with category relation
-    const [totalProducts, products] = await Promise.all([
-      prisma.product.count({ where: whereClause }),
+    // Get products and total count - MATCHING YOUR SCHEMA
+    const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
-        where: whereClause,
+        where,
         include: {
           shop: {
             select: {
@@ -102,40 +120,37 @@ export async function GET(request: NextRequest) {
         orderBy,
         skip,
         take: limit
-      })
+      }),
+      prisma.product.count({ where })
     ])
 
-    // Transform product data
-    const transformedProducts = products.map(product => {
-      // Use shop name first, fallback to vendor name
-      const vendorName = product.shop?.name 
-        || `${product.vendor?.firstName || ''} ${product.vendor?.lastName || ''}`.trim()
-        || 'Vendor'
+    // Transform products - MATCHING YOUR SCHEMA
+    const transformedProducts = products.map(product => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      images: product.images || ['/placeholder.svg'],
+      category: product.categoryRef?.name || product.category,
+      categoryId: product.categoryId,
+      inStock: product.inStock,
+      stockCount: product.stockCount,
+      rating: product.rating,
+      reviews: product.reviews,
+      vendorId: product.vendorId,
+      vendorName: product.shop?.name || 
+                 `${product.vendor?.firstName || ''} ${product.vendor?.lastName || ''}`.trim() || 
+                 'Vendor',
+      featured: product.featured,
+      size: product.size,
+      color: product.color,
+      material: product.material,
+      brand: product.brand,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString()
+    }))
 
-      // Use managed category name if available, otherwise fallback to category string
-      const displayCategory = product.categoryRef?.name || product.category
-
-      return {
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        images: product.images || ['/placeholder.svg'],
-        category: displayCategory, // Use proper category name
-        categoryId: product.categoryId, // Include categoryId for frontend
-        inStock: product.inStock,
-        stock: product.stockCount,
-        rating: product.rating,
-        reviews: product.reviews,
-        vendorId: product.vendorId,
-        vendorName,
-        featured: product.featured || false,
-        createdAt: product.createdAt.toISOString(),
-        updatedAt: product.updatedAt.toISOString()
-      }
-    })
-
-    const totalPages = Math.ceil(totalProducts / limit)
+    const totalPages = Math.ceil(totalCount / limit)
 
     return NextResponse.json({
       success: true,
@@ -144,7 +159,7 @@ export async function GET(request: NextRequest) {
         pagination: {
           currentPage: page,
           totalPages,
-          totalProducts,
+          totalProducts: totalCount,
           hasNext: page < totalPages,
           hasPrev: page > 1,
         }
@@ -153,7 +168,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Shop products API error:', error)
-    
     return NextResponse.json(
       { 
         success: false,

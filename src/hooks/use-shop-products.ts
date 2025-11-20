@@ -1,5 +1,4 @@
-// hooks/use-shop-products.ts
-import { useState, useEffect } from 'react'
+import useSWR from 'swr'
 
 interface Product {
   id: string
@@ -15,6 +14,10 @@ interface Product {
   reviews: number | null
   vendorId: string
   vendorName: string
+  size?: string
+  color?: string
+  material?: string
+  brand?: string
   createdAt: string
   updatedAt: string
 }
@@ -22,49 +25,67 @@ interface Product {
 interface UseShopProductsProps {
   search?: string
   category?: string
-  sortBy?: string
+  sort?: string
+  sizes?: string[]
+  colors?: string[]
+  materials?: string[]
+  brands?: string[]
 }
 
-export function useShopProducts({ search = '', category = '', sortBy = 'featured' }: UseShopProductsProps) {
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        
-        // Build query parameters
-        const params = new URLSearchParams()
-        if (search) params.append('search', search)
-        if (category) params.append('category', category)
-        if (sortBy) params.append('sortBy', sortBy)
-
-        const response = await fetch(`/api/shop/products?${params.toString()}`)
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch products: ${response.status}`)
-        }
-
-        const data = await response.json()
-
-        if (data.success && data.data) {
-          setProducts(data.data.products || [])
-        } else {
-          throw new Error(data.error || 'Failed to load products')
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load products')
-        setProducts([])
-      } finally {
-        setLoading(false)
-      }
+interface ApiResponse {
+  success: boolean
+  data: {
+    products: Product[]
+    pagination: {
+      currentPage: number
+      totalPages: number
+      totalProducts: number
+      hasNext: boolean
+      hasPrev: boolean
     }
+  }
+  error?: string
+}
 
-    fetchProducts()
-  }, [search, category, sortBy])
+// Fetcher function for SWR
+const fetcher = async (url: string): Promise<ApiResponse> => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch: ${response.status}`)
+  }
+  return response.json()
+}
 
-  return { products, loading, error }
+export function useShopProducts({ 
+  search = '', 
+  category = '', 
+  sort = 'featured',
+  sizes = [],
+  colors = [],
+  materials = [],
+  brands = []
+}: UseShopProductsProps) {
+  // Build query parameters
+  const params = new URLSearchParams()
+  if (search) params.append('search', search)
+  if (category) params.append('category', category)
+  if (sort) params.append('sort', sort)
+  if (sizes.length > 0) params.append('sizes', sizes.join(','))
+  if (colors.length > 0) params.append('colors', colors.join(','))
+  if (materials.length > 0) params.append('materials', materials.join(','))
+  if (brands.length > 0) params.append('brands', brands.join(','))
+
+  const url = `/api/shop/products?${params.toString()}`
+
+  const { data, error, isLoading } = useSWR<ApiResponse>(url, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 60000, // 1 minute
+  })
+
+  return {
+    products: data?.success ? data.data.products : [],
+    loading: isLoading,
+    error: error?.message || (data && !data.success ? data.error : null),
+  }
 }

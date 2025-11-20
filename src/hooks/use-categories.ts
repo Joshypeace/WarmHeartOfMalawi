@@ -1,52 +1,50 @@
-// hooks/use-categories.ts
-import { useState, useEffect } from 'react'
+import useSWR from 'swr'
 
-interface Category {
+interface ManagedCategory {
+  id: string
   name: string
-  count: number
+  description: string | null
   image?: string | null
-  description: string
+  isActive: boolean
+  productCount: number
+  createdAt: string
+  updatedAt: string
 }
 
 interface ApiResponse {
   success: boolean
-  data?: Category[]
+  data?: {
+    categories: ManagedCategory[]
+  }
   error?: string
 }
 
+// Fetcher function for SWR
+const fetcher = async (url: string): Promise<ApiResponse> => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch: ${response.status}`)
+  }
+  return response.json()
+}
+
 export function useCategories() {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        
-        const response = await fetch('/api/categories/with-images')
-        const data: ApiResponse = await response.json()
-
-        if (data.success && data.data) {
-          setCategories(data.data)
-        } else {
-          throw new Error(data.error || 'Failed to fetch categories')
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch categories')
-        setCategories([])
-      } finally {
-        setLoading(false)
-      }
+  const { data, error, isLoading } = useSWR<ApiResponse>(
+    '/api/admin/categories',
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300000, // 5 minutes
     }
+  )
 
-    fetchCategories()
-  }, [])
+  // The data structure matches exactly what your ShopPage expects
+  const categories = data?.success ? data.data?.categories || [] : []
 
   return {
     categories,
-    loading,
-    error
+    loading: isLoading,
+    error: error?.message || (data && !data.success ? data.error : null),
   }
 }

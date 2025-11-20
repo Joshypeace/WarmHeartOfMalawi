@@ -1,10 +1,10 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -112,6 +112,10 @@ model Product {
   featured    Boolean     @default(false)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  brand       String?
+  size        String?
+  color       String?
+  material    String? 
   orderItems  OrderItem[]
   shop        VendorShop  @relation(fields: [shopId], references: [id], onDelete: Cascade)
   vendor      User        @relation("VendorProducts", fields: [vendorId], references: [id], onDelete: Cascade)
