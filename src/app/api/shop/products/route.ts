@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
-    // Build where clause - MATCHING YOUR SCHEMA
+    // Build where clause
     const where: any = {
       inStock: true,
       shop: {
@@ -34,15 +34,9 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Category filter
-    if (category) {
-      const isCategoryId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(category)
-      
-      if (isCategoryId) {
-        where.categoryId = category
-      } else {
-        where.category = category
-      }
+    // Category filter - FIXED: Always use categoryId when category is provided
+    if (category && category !== 'all') {
+      where.categoryId = category
     }
 
     // Size filter
@@ -92,7 +86,7 @@ export async function GET(request: NextRequest) {
         break
     }
 
-    // Get products and total count - MATCHING YOUR SCHEMA
+    // Get products and total count
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
         where,
@@ -124,7 +118,7 @@ export async function GET(request: NextRequest) {
       prisma.product.count({ where })
     ])
 
-    // Transform products - MATCHING YOUR SCHEMA
+    // Transform products
     const transformedProducts = products.map(product => ({
       id: product.id,
       name: product.name,

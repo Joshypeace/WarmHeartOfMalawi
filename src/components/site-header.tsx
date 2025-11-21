@@ -75,6 +75,7 @@ export function SiteHeader() {
           { href: "/admin/dashboard", label: "Dashboard", icon: <BarChart3 className="h-4 w-4" /> },
           { href: "/admin/users", label: "Users", icon: <Users className="h-4 w-4" /> },
           { href: "/admin/vendors", label: "Vendors", icon: <Store className="h-4 w-4" /> },
+          { href: "/admin/categories", label: "Categories", icon: <Settings className="h-4 w-4" /> },
         ]
       case "regional_admin":
         return [
