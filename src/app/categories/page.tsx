@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { Package, ArrowRight, Sparkles } from "lucide-react"
+import { Package, ArrowRight, Sparkles, ChevronLeft, ChevronRight } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 
 interface ManagedCategory {
   id: string
@@ -20,6 +20,7 @@ export default function CategoriesPage() {
   const [categories, setCategories] = useState<ManagedCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Fetch managed categories
   useEffect(() => {
@@ -49,6 +50,18 @@ export default function CategoriesPage() {
 
     fetchCategories()
   }, [])
+
+  const scrollLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -300, behavior: 'smooth' })
+    }
+  }
+
+  const scrollRight = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: 300, behavior: 'smooth' })
+    }
+  }
 
   const categoryColors = [
     "from-primary to-accent",
@@ -95,83 +108,131 @@ export default function CategoriesPage() {
         </div>
 
         {loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="flex gap-8 overflow-hidden py-4">
             {Array.from({ length: 6 }).map((_, index) => (
-              <Card key={index} className="overflow-hidden border-2 animate-pulse">
-                <div className="aspect-[4/3] bg-muted" />
-                <CardContent className="p-6">
-                  <div className="h-6 bg-muted rounded mb-2" />
-                  <div className="h-4 bg-muted rounded mb-4" />
-                  <div className="h-10 bg-muted rounded" />
-                </CardContent>
-              </Card>
+              <div key={index} className="flex-shrink-0 w-80">
+                <Card className="overflow-hidden border-2 animate-pulse">
+                  <div className="aspect-[4/3] bg-muted" />
+                  <CardContent className="p-6">
+                    <div className="h-6 bg-muted rounded mb-2" />
+                    <div className="h-4 bg-muted rounded mb-4" />
+                    <div className="h-10 bg-muted rounded" />
+                  </CardContent>
+                </Card>
+              </div>
             ))}
           </div>
         )}
 
-        {!loading && (
+        {!loading && categories.length > 0 && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {/* Scroll buttons for desktop */}
+            <div className="hidden md:flex items-center justify-center gap-4 mb-6">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={scrollLeft}
+                className="rounded-full h-10 w-10"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Scroll horizontally to browse categories
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={scrollRight}
+                className="rounded-full h-10 w-10"
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Horizontally scrollable categories */}
+            <div 
+              ref={scrollContainerRef}
+              className="flex gap-6 overflow-x-auto pb-6 snap-x snap-mandatory scrollbar-hide"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+              }}
+            >
               {categories.map((category, index) => (
-                <Link
-                  key={category.id}
-                  href={`/shop?category=${encodeURIComponent(category.id)}`}
-                  className="group"
+                <div 
+                  key={category.id} 
+                  className="flex-shrink-0 w-full sm:w-80 snap-start"
                 >
-                  <Card className="overflow-hidden border-2 hover:border-primary/50 transition-all h-full">
-                    <div className="relative aspect-[4/3] overflow-hidden">
-                      {category.image ? (
-                        <img
-                          src={category.image}
-                          alt={category.name}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                          <Package className="h-16 w-16 text-primary/40" />
+                  <Link
+                    href={`/shop?category=${encodeURIComponent(category.id)}`}
+                    className="group block h-full"
+                  >
+                    <Card className="overflow-hidden border-2 hover:border-primary/50 transition-all h-full">
+                      <div className="relative aspect-[4/3] overflow-hidden">
+                        {category.image ? (
+                          <img
+                            src={category.image}
+                            alt={category.name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                            <Package className="h-16 w-16 text-primary/40" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                        <div className="absolute bottom-0 left-0 right-0 p-6">
+                          <Badge
+                            className={`mb-3 bg-gradient-to-r ${categoryColors[index % categoryColors.length]} border-none shadow-lg`}
+                          >
+                            {category.productCount} Products
+                          </Badge>
+                          <h3 className="text-2xl font-bold text-white mb-2">{category.name}</h3>
+                          <p className="text-sm text-white/80 mb-4 line-clamp-2">
+                            {category.description || `Explore our ${category.name.toLowerCase()} collection`}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="gap-2 bg-white/90 hover:bg-white text-foreground transition-all duration-200"
+                          >
+                            Browse {category.name}
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
                         </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-6">
-                        <Badge
-                          className={`mb-3 bg-gradient-to-r ${categoryColors[index % categoryColors.length]} border-none shadow-lg`}
-                        >
-                          {category.productCount} Products
-                        </Badge>
-                        <h3 className="text-2xl font-bold text-white mb-2">{category.name}</h3>
-                        <p className="text-sm text-white/80 mb-4">
-                          {category.description || `Explore our ${category.name.toLowerCase()} collection`}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="gap-2 bg-white/90 hover:bg-white text-foreground transition-all duration-200"
-                        >
-                          Browse {category.name}
-                          <ArrowRight className="h-4 w-4" />
-                        </Button>
                       </div>
-                    </div>
-                  </Card>
-                </Link>
+                    </Card>
+                  </Link>
+                </div>
               ))}
             </div>
 
-            {categories.length === 0 && !loading && (
-              <div className="text-center py-12">
-                <Package className="h-24 w-24 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-2xl font-bold mb-2">No Categories Found</h3>
-                <p className="text-muted-foreground mb-6">
-                  No product categories are currently available.
-                </p>
-                <Button asChild>
-                  <Link href="/shop">
-                    Browse All Products
-                  </Link>
-                </Button>
-              </div>
-            )}
+            {/* Mobile scroll hint */}
+            <div className="md:hidden text-center mt-4">
+              <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <ChevronLeft className="h-4 w-4" />
+                Swipe to browse more categories
+                <ChevronRight className="h-4 w-4" />
+              </p>
+            </div>
           </>
+        )}
+
+        {!loading && categories.length === 0 && (
+          <div className="text-center py-12">
+            <Package className="h-24 w-24 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-2xl font-bold mb-2">No Categories Found</h3>
+            <p className="text-muted-foreground mb-6">
+              No product categories are currently available.
+            </p>
+            <Button asChild>
+              <Link href="/shop">
+                Browse All Products
+              </Link>
+            </Button>
+          </div>
         )}
 
         <div className="mt-16 text-center">
