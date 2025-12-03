@@ -2,11 +2,18 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { ArrowRight, ShoppingBag, Star, Package, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react"
+import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { mockProducts } from "@/lib/mock-data"
 import { Badge } from "@/components/ui/badge"
+import { mockProducts } from "@/lib/mock-data"
+
+// Pre-generate consistent discount percentages to avoid hydration errors
+const generateConsistentDiscounts = () => {
+  // Use a seed or fixed values to ensure consistency
+  const fixedDiscounts = [15, 20, 25, 30, 35, 40, 45, 50]
+  return fixedDiscounts
+}
 
 export default function HomePage() {
   const heroProducts = mockProducts.slice(0, 5)
@@ -14,10 +21,18 @@ export default function HomePage() {
   const featuredProducts = mockProducts.filter((p) => p.featured).slice(0, 6)
   const topDeals = mockProducts.slice(0, 8)
   
+  // Use consistent discounts to avoid hydration errors
+  const [discounts, setDiscounts] = useState<number[]>([])
+  
   // Refs for horizontal scrolling
   const categoriesRef = useRef<HTMLDivElement>(null)
   const dealsRef = useRef<HTMLDivElement>(null)
   const featuredRef = useRef<HTMLDivElement>(null)
+
+  // Initialize consistent discounts on client side only
+  useEffect(() => {
+    setDiscounts(generateConsistentDiscounts())
+  }, [])
 
   // Scroll functions
   const scrollCategories = (direction: 'left' | 'right') => {
@@ -209,35 +224,40 @@ export default function HomePage() {
                 className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                {topDeals.map((p) => (
-                  <Link key={p.id} href={`/shop/${p.id}`} className="block flex-shrink-0">
-                    <Card className="w-64 h-full hover:shadow-md transition">
-                      <div className="h-40 bg-muted overflow-hidden rounded-t-lg">
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-                      <CardContent className="p-4">
-                        <p className="text-sm font-medium line-clamp-2 mb-2">{p.name}</p>
-                        <p className="text-primary font-bold text-base mb-2">
-                          MWK {p.price.toLocaleString()}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1 text-xs">
-                            <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                            <span className="font-medium">{p.rating}</span>
-                            <span className="text-muted-foreground">({p.reviews})</span>
-                          </div>
-                          <Badge variant="destructive" className="text-xs">
-                            -{Math.floor(Math.random() * 30) + 10}%
-                          </Badge>
+                {topDeals.map((p, index) => {
+                  // Use index to get consistent discount or use a fixed percentage
+                  const discount = discounts[index] || 20 // Fallback to 20% if discounts not loaded yet
+                  
+                  return (
+                    <Link key={p.id} href={`/shop/${p.id}`} className="block flex-shrink-0">
+                      <Card className="w-64 h-full hover:shadow-md transition">
+                        <div className="h-40 bg-muted overflow-hidden rounded-t-lg">
+                          <img
+                            src={p.image}
+                            alt={p.name}
+                            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                          />
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                        <CardContent className="p-4">
+                          <p className="text-sm font-medium line-clamp-2 mb-2">{p.name}</p>
+                          <p className="text-primary font-bold text-base mb-2">
+                            MWK {p.price.toLocaleString()}
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1 text-xs">
+                              <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                              <span className="font-medium">{p.rating}</span>
+                              <span className="text-muted-foreground">({p.reviews})</span>
+                            </div>
+                            <Badge variant="destructive" className="text-xs">
+                              -{discount}%
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  )
+                })}
               </div>
               
               {/* Gradient overlay for scroll indication */}
@@ -351,4 +371,3 @@ export default function HomePage() {
     </div>
   )
 }
-
