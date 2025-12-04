@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma"
 
 export async function GET() {
   try {
-    // Get all active categories with product counts from managed categories
     const categories = await prisma.category.findMany({
       where: {
         isActive: true
@@ -28,14 +27,16 @@ export async function GET() {
       }
     })
 
-    // Transform the data to match what ShopPage expects
-    const categoriesWithCount = categories.map(category => ({
-      id: category.id,
-      name: category.name,
-      description: category.description,
-      isActive: category.isActive,
-      productCount: category._count.products
-    })).filter(cat => cat.productCount > 0) // Only show categories with products
+    const categoriesWithCount = categories
+      .map(category => ({
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        image: category.image,              // 🔥 FIXED — now included
+        isActive: category.isActive,
+        productCount: category._count.products
+      }))
+      .filter(cat => cat.productCount > 0)
 
     return NextResponse.json({
       success: true,
