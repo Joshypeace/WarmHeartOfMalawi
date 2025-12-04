@@ -4,95 +4,41 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { CreditCard, MapPin, User, ArrowLeft, CheckCircle2, Truck, Info } from "lucide-react"
+import { CreditCard, User, ArrowLeft, CheckCircle2, Star, Info, MessageSquare, ThumbsUp, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { useCart } from "@/lib/cart-context"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-const MALAWI_DISTRICTS = [
-  "Balaka", "Blantyre", "Chikwawa", "Chiradzulu", "Chitipa", "Dedza", "Dowa", 
-  "Karonga", "Kasungu", "Likoma", "Lilongwe", "Machinga", "Mangochi", "Mchinji", 
-  "Mulanje", "Mwanza", "Mzimba", "Neno", "Nkhata Bay", "Nkhotakota", "Nsanje", 
-  "Ntcheu", "Ntchisi", "Phalombe", "Rumphi", "Salima", "Thyolo", "Zomba",
-]
-
-// Courier services with pricing and delivery times
-const COURIER_SERVICES = [
-  {
-    id: "speed-courier",
-    name: "Speed Courier",
-    description: "Fast and reliable delivery across Malawi",
-    baseCost: 1200,
-    deliveryTime: "2-3 business days",
-    coverage: "Nationwide",
-    icon: "🚚"
-  },
-  {
-    id: "cts-courier",
-    name: "CTS Courier",
-    description: "Secure and tracked delivery service",
-    baseCost: 1100,
-    deliveryTime: "3-4 business days",
-    coverage: "Major cities and towns",
-    icon: "📦"
-  },
-  {
-    id: "swift-courier",
-    name: "SWIFT Courier",
-    description: "Express delivery for urgent packages",
-    baseCost: 1500,
-    deliveryTime: "1-2 business days",
-    coverage: "Lilongwe & Blantyre express",
-    icon: "⚡"
-  },
-  {
-    id: "pickup",
-    name: "Store Pickup",
-    description: "Pick up your order from the vendor's location",
-    baseCost: 0,
-    deliveryTime: "Ready in 24 hours",
-    coverage: "Vendor location",
-    icon: "🏪"
-  }
-]
-
-// Calculate shipping cost based on district and courier
-const calculateShippingCost = (district: string, courierId: string, orderTotal: number) => {
-  // Free shipping for orders over MWK 10,000 (except pickup)
-  if (orderTotal > 10000 && courierId !== 'pickup') return 0
-
-  const courier = COURIER_SERVICES.find(c => c.id === courierId)
-  if (!courier) return 0
-
-  let cost = courier.baseCost
-
-  // Add surcharge for remote districts
-  const remoteDistricts = ["Chitipa", "Karonga", "Likoma", "Nkhata Bay", "Rumphi"]
-  if (remoteDistricts.includes(district) && courierId !== 'pickup') {
-    cost += 500
-  }
-
-  return cost
+interface Review {
+  id: string
+  userId: string
+  userName: string
+  userAvatar?: string
+  rating: number
+  comment: string
+  createdAt: string
+  likes: number
+  isVerifiedPurchase: boolean
+  helpfulCount: number
 }
 
 interface CheckoutFormData {
   fullName: string
   email: string
   phone: string
-  address: string
-  district: string
-  postalCode: string
-  shippingMethod: string
   paymentMethod: string
   specialInstructions?: string
 }
@@ -104,20 +50,23 @@ export default function CheckoutPage() {
   const { toast } = useToast()
   const [isProcessing, setIsProcessing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [newReview, setNewReview] = useState({
+    rating: 5,
+    comment: "",
+    reviewType: "product" // "product" or "website"
+  })
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
 
   const [formData, setFormData] = useState<CheckoutFormData>({
     fullName: "",
     email: "",
     phone: "",
-    address: "",
-    district: "",
-    postalCode: "",
-    shippingMethod: "speed-courier",
     paymentMethod: "mobile",
     specialInstructions: ""
   })
 
-  const [shippingCost, setShippingCost] = useState(0)
+  const finalTotal = total
 
   // Initialize form with user data
   useEffect(() => {
@@ -126,50 +75,40 @@ export default function CheckoutPage() {
         ...prev,
         fullName: `${user.firstName} ${user.lastName}`.trim(),
         email: user.email || "",
-        district: user.district || ""
       }))
     }
     setIsLoading(false)
   }, [user])
 
-  // Recalculate shipping cost when district, shipping method, or total changes
+  // Fetch existing reviews
   useEffect(() => {
-    const cost = calculateShippingCost(formData.district, formData.shippingMethod, total)
-    setShippingCost(cost)
-  }, [formData.district, formData.shippingMethod, total])
+    fetchReviews()
+  }, [])
 
-  const finalTotal = total + shippingCost
-  const selectedCourier = COURIER_SERVICES.find(c => c.id === formData.shippingMethod)
+  const fetchReviews = async () => {
+    try {
+      const response = await fetch('/api/reviews')
+      if (response.ok) {
+        const data = await response.json()
+        setReviews(data.reviews || [])
+      }
+    } catch (error) {
+      console.error('Error fetching reviews:', error)
+    }
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
   const handleSelectChange = (name: keyof CheckoutFormData, value: string) => {
-    setFormData(prev => {
-      const newData = { ...prev, [name]: value }
-      
-      // Recalculate shipping cost immediately when shipping method or district changes
-      if (name === 'shippingMethod' || name === 'district') {
-        const newShippingCost = calculateShippingCost(
-          name === 'district' ? value : newData.district,
-          name === 'shippingMethod' ? value : newData.shippingMethod,
-          total
-        )
-        setShippingCost(newShippingCost)
-      }
-      
-      return newData
-    })
+    setFormData(prev => ({ ...prev, [name]: value }))
   }
 
   const validateForm = (): string | null => {
     if (!formData.fullName.trim()) return "Full name is required"
     if (!formData.email.trim()) return "Email is required"
     if (!formData.phone.trim()) return "Phone number is required"
-    if (!formData.address.trim()) return "Address is required"
-    if (!formData.district) return "District is required"
-    if (!formData.shippingMethod) return "Shipping method is required"
     if (!formData.paymentMethod) return "Payment method is required"
 
     // Validate phone number format (Malawi numbers)
@@ -226,19 +165,14 @@ export default function CheckoutPage() {
           price: item.price,
           name: item.name
         })),
-        shippingAddress: {
+        customerInfo: {
           fullName: formData.fullName,
           phone: formData.phone,
           email: formData.email,
-          address: formData.address,
-          district: formData.district,
-          postalCode: formData.postalCode,
         },
-        shippingMethod: formData.shippingMethod,
         paymentMethod: formData.paymentMethod,
         specialInstructions: formData.specialInstructions,
         subtotal: total,
-        shippingCost,
         total: finalTotal,
         itemCount
       }
@@ -275,6 +209,77 @@ export default function CheckoutPage() {
       setIsProcessing(false)
     }
   }
+
+  const handleSubmitReview = async () => {
+    if (!newReview.comment.trim()) {
+      toast({
+        title: "Review required",
+        description: "Please write a review comment",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmittingReview(true)
+    try {
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...newReview,
+          productId: items[0]?.productId, // For product reviews
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Review submitted!",
+          description: "Thank you for your feedback.",
+        })
+        setNewReview({
+          rating: 5,
+          comment: "",
+          reviewType: "product"
+        })
+        fetchReviews() // Refresh reviews
+      } else {
+        throw new Error('Failed to submit review')
+      }
+    } catch (error) {
+      toast({
+        title: "Review failed",
+        description: "There was an error submitting your review.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }
+
+  const handleLikeReview = async (reviewId: string) => {
+    try {
+      const response = await fetch(`/api/reviews/${reviewId}/like`, {
+        method: 'POST',
+      })
+      
+      if (response.ok) {
+        setReviews(reviews.map(review => 
+          review.id === reviewId 
+            ? { ...review, helpfulCount: review.helpfulCount + 1 }
+            : review
+        ))
+      }
+    } catch (error) {
+      console.error('Error liking review:', error)
+    }
+  }
+
+  // Calculate average rating
+  const averageRating = reviews.length > 0 
+    ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length 
+    : 0
 
   // Redirect if cart is empty
   if (items.length === 0 && !isLoading) {
@@ -363,116 +368,6 @@ export default function CheckoutPage() {
                 </CardContent>
               </Card>
 
-              {/* Shipping Address */}
-              <Card>
-                <CardHeader className="px-4 md:px-6 pt-4 md:pt-6">
-                  <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
-                    <MapPin className="h-4 w-4 md:h-5 md:w-5" />
-                    Shipping Address
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 px-4 md:px-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="address" className="text-sm">
-                      Street Address *
-                    </Label>
-                    <Input
-                      id="address"
-                      name="address"
-                      placeholder="House number, street name, area"
-                      value={formData.address}
-                      onChange={handleInputChange}
-                      className="h-10 md:h-11"
-                      required
-                    />
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="district" className="text-sm">
-                        District *
-                      </Label>
-                      <Select 
-                        value={formData.district} 
-                        onValueChange={(value) => handleSelectChange('district', value)} 
-                        required
-                      >
-                        <SelectTrigger className="h-10 md:h-11">
-                          <SelectValue placeholder="Select your district" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MALAWI_DISTRICTS.map((district) => (
-                            <SelectItem key={district} value={district}>
-                              {district}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="postalCode" className="text-sm">
-                        Postal Code (Optional)
-                      </Label>
-                      <Input
-                        id="postalCode"
-                        name="postalCode"
-                        value={formData.postalCode}
-                        onChange={handleInputChange}
-                        className="h-10 md:h-11"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Shipping Method */}
-              <Card>
-                <CardHeader className="px-4 md:px-6 pt-4 md:pt-6">
-                  <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
-                    <Truck className="h-4 w-4 md:h-5 md:w-5" />
-                    Shipping Method
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 md:px-6">
-                  <RadioGroup 
-                    value={formData.shippingMethod} 
-                    onValueChange={(value) => handleSelectChange('shippingMethod', value)} 
-                    className="space-y-3"
-                  >
-                    {COURIER_SERVICES.map((courier) => {
-                      const cost = calculateShippingCost(formData.district, courier.id, total)
-                      return (
-                        <div key={courier.id} className="flex items-start space-x-3 p-3 md:p-4 border rounded-lg hover:border-primary transition-colors">
-                          <RadioGroupItem value={courier.id} id={courier.id} />
-                          <div className="flex-1 min-w-0">
-                            <Label htmlFor={courier.id} className="flex items-center gap-2 cursor-pointer text-sm md:text-base font-medium">
-                              <span className="text-lg">{courier.icon}</span>
-                              {courier.name}
-                              {total > 10000 && courier.id !== 'pickup' && (
-                                <Badge variant="secondary" className="ml-2 text-xs">
-                                  FREE
-                                </Badge>
-                              )}
-                            </Label>
-                            <div className="mt-1 text-xs md:text-sm text-muted-foreground">
-                              <p>{courier.description}</p>
-                              <div className="flex items-center gap-4 mt-1">
-                                <span>📅 {courier.deliveryTime}</span>
-                                <span>📍 {courier.coverage}</span>
-                                <span className={`font-medium ${
-                                  cost === 0 ? 'text-green-600' : ''
-                                }`}>
-                                  {cost === 0 ? "FREE" : `MWK ${cost.toLocaleString()}`}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </RadioGroup>
-                </CardContent>
-              </Card>
-
               {/* Payment Method */}
               <Card>
                 <CardHeader className="px-4 md:px-6 pt-4 md:pt-6">
@@ -545,6 +440,291 @@ export default function CheckoutPage() {
                 </CardContent>
               </Card>
 
+              {/* Reviews Section */}
+              <Card>
+                <CardHeader className="px-4 md:px-6 pt-4 md:pt-6">
+                  <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                    <MessageSquare className="h-4 w-4 md:h-5 md:w-5" />
+                    Share Your Experience
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 md:px-6 space-y-6">
+                  {/* Leave a Review Form */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium">Leave a Review</h3>
+                      <div className="flex items-center">
+                        <Select 
+                          value={newReview.reviewType} 
+                          onValueChange={(value: "product" | "website") => 
+                            setNewReview({...newReview, reviewType: value})
+                          }
+                        >
+                          <SelectTrigger className="w-32 h-8">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="product">Product</SelectItem>
+                            <SelectItem value="website">Website</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-muted-foreground">Rating:</span>
+                        <div className="flex">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setNewReview({...newReview, rating: star})}
+                              className="p-1"
+                            >
+                              <Star
+                                className={`h-5 w-5 ${
+                                  star <= newReview.rating
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <Textarea
+                        placeholder={`Share your thoughts about this ${
+                          newReview.reviewType === 'product' ? 'product' : 'website experience'
+                        }...`}
+                        value={newReview.comment}
+                        onChange={(e) => setNewReview({...newReview, comment: e.target.value})}
+                        className="min-h-[100px]"
+                        maxLength={500}
+                      />
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs text-muted-foreground">
+                          {newReview.comment.length}/500 characters
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleSubmitReview}
+                          disabled={isSubmittingReview || !newReview.comment.trim()}
+                        >
+                          {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reviews Tabs */}
+                  <Tabs defaultValue="all" className="w-full">
+                    <TabsList className="grid grid-cols-3">
+                      <TabsTrigger value="all">All Reviews ({reviews.length})</TabsTrigger>
+                      <TabsTrigger value="product">Product Reviews</TabsTrigger>
+                      <TabsTrigger value="website">Website Reviews</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="all" className="space-y-4 mt-4">
+                      {/* Overall Rating Summary */}
+                      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold">{averageRating.toFixed(1)}</div>
+                          <div className="flex items-center justify-center">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-4 w-4 ${
+                                  star <= Math.round(averageRating)
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Based on {reviews.length} reviews
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          {[5, 4, 3, 2, 1].map((rating) => {
+                            const count = reviews.filter(r => r.rating === rating).length
+                            const percentage = reviews.length > 0 ? (count / reviews.length) * 100 : 0
+                            return (
+                              <div key={rating} className="flex items-center gap-2 text-sm">
+                                <span className="w-8">{rating} stars</span>
+                                <div className="w-32 bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-yellow-400 h-2 rounded-full" 
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                                <span className="w-8 text-right">{count}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Reviews List */}
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                        {reviews.length === 0 ? (
+                          <div className="text-center py-8">
+                            <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-muted-foreground">No reviews yet. Be the first to share your experience!</p>
+                          </div>
+                        ) : (
+                          reviews.map((review) => (
+                            <div key={review.id} className="p-4 border rounded-lg">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={review.userAvatar} />
+                                    <AvatarFallback>
+                                      {review.userName.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <p className="font-medium text-sm">{review.userName}</p>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star
+                                            key={star}
+                                            className={`h-3 w-3 ${
+                                              star <= review.rating
+                                                ? 'fill-yellow-400 text-yellow-400'
+                                                : 'text-gray-300'
+                                            }`}
+                                          />
+                                        ))}
+                                      </div>
+                                      {review.isVerifiedPurchase && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          Verified Purchase
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(review.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <p className="text-sm mb-3">{review.comment}</p>
+                              <div className="flex items-center justify-between">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleLikeReview(review.id)}
+                                  className="h-8 px-2"
+                                >
+                                  <ThumbsUp className="h-4 w-4 mr-1" />
+                                  Helpful ({review.helpfulCount})
+                                </Button>
+                                <Badge variant="outline" className="text-xs">
+                                  {review.id.startsWith('prod') ? 'Product' : 'Website'}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="product" className="mt-4">
+                      <div className="space-y-4">
+                        {reviews
+                          .filter(review => review.id.startsWith('prod'))
+                          .map((review) => (
+                            <div key={review.id} className="p-4 border rounded-lg">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={review.userAvatar} />
+                                    <AvatarFallback>
+                                      {review.userName.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <p className="font-medium text-sm">{review.userName}</p>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star
+                                            key={star}
+                                            className={`h-3 w-3 ${
+                                              star <= review.rating
+                                                ? 'fill-yellow-400 text-yellow-400'
+                                                : 'text-gray-300'
+                                            }`}
+                                          />
+                                        ))}
+                                      </div>
+                                      {review.isVerifiedPurchase && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          Verified Purchase
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(review.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <p className="text-sm">{review.comment}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="website" className="mt-4">
+                      <div className="space-y-4">
+                        {reviews
+                          .filter(review => review.id.startsWith('web'))
+                          .map((review) => (
+                            <div key={review.id} className="p-4 border rounded-lg">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={review.userAvatar} />
+                                    <AvatarFallback>
+                                      {review.userName.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <p className="font-medium text-sm">{review.userName}</p>
+                                    <div className="flex">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <Star
+                                          key={star}
+                                          className={`h-3 w-3 ${
+                                            star <= review.rating
+                                              ? 'fill-yellow-400 text-yellow-400'
+                                              : 'text-gray-300'
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(review.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <p className="text-sm">{review.comment}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+
               {/* Special Instructions */}
               <Card>
                 <CardHeader className="px-4 md:px-6 pt-4 md:pt-6">
@@ -555,7 +735,7 @@ export default function CheckoutPage() {
                     name="specialInstructions"
                     value={formData.specialInstructions}
                     onChange={handleInputChange}
-                    placeholder="Any special delivery instructions or notes for the vendor..."
+                    placeholder="Any special notes for the vendor..."
                     className="w-full h-20 p-3 border rounded-lg resize-none text-sm"
                     maxLength={500}
                   />
@@ -609,27 +789,6 @@ export default function CheckoutPage() {
                       <span className="text-muted-foreground">Subtotal ({itemCount} items)</span>
                       <span>MWK {total.toLocaleString()}</span>
                     </div>
-                    
-                    {/* Shipping Details */}
-                    <div className="flex justify-between text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Shipping</span>
-                        {selectedCourier && (
-                          <p className="text-xs text-muted-foreground">
-                            {selectedCourier.name}
-                          </p>
-                        )}
-                      </div>
-                      <span className={shippingCost === 0 ? "text-green-600 font-medium" : ""}>
-                        {shippingCost === 0 ? "FREE" : `MWK ${shippingCost.toLocaleString()}`}
-                      </span>
-                    </div>
-
-                    {total < 10000 && shippingCost > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Add MWK {(10000 - total).toLocaleString()} more for free shipping!
-                      </p>
-                    )}
 
                     <Separator />
 
