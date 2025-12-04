@@ -84,6 +84,7 @@ export function SiteHeader() {
         ]
       case "customer":
         return [
+          { href: "/customer/profile", label: "My Profile", icon: <Package className="h-4 w-4" /> },
           { href: "/customer/orders", label: "My Orders", icon: <Package className="h-4 w-4" /> },
           { href: "/customer/wishlist", label: "Wishlist", icon: <Heart className="h-4 w-4" /> },
         ]
@@ -93,7 +94,7 @@ export function SiteHeader() {
   }
 
   const roleNavigation = getRoleNavigation()
-  const dashboardLink = getDashboardLink()
+  // const dashboardLink = getDashboardLink()
 
   return (
     <header
@@ -201,12 +202,12 @@ export function SiteHeader() {
                 ))}
 
                 <DropdownMenuSeparator />
-
+{/* 
                 <DropdownMenuItem asChild>
                   <Link href={dashboardLink} className="flex items-center gap-3 px-2 py-2">
                     <Home className="h-4 w-4" /> Dashboard
                   </Link>
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
 
                 <DropdownMenuItem
                   onClick={logout}
