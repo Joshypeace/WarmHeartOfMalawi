@@ -207,6 +207,9 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.2(@types/react@19.2.2)
+      baseline-browser-mapping:
+        specifier: ^2.9.2
+        version: 2.9.2
       install:
         specifier: ^0.13.0
         version: 0.13.0
@@ -1413,8 +1416,8 @@ packages:
     resolution: {integrity: sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==}
     engines: {node: '>= 6.0.0'}
 
-  baseline-browser-mapping@2.8.21:
-    resolution: {integrity: sha512-JU0h5APyQNsHOlAM7HnQnPToSDQoEBZqzu/YBlqDnEeymPnZDREeXJA3KBMQee+dKteAxZ2AtvQEvVYdZf241Q==}
+  baseline-browser-mapping@2.9.2:
+    resolution: {integrity: sha512-PxSsosKQjI38iXkmb3d0Y32efqyA0uW4s41u4IVBsLlWLhCiYNpH/AfNOVWRqCQBlD8TFJTz6OUWNd4DFJCnmw==}
     hasBin: true
 
   bcryptjs@3.0.2:
@@ -3443,13 +3446,13 @@ snapshots:
 
   aws-ssl-profiles@1.1.2: {}
 
-  baseline-browser-mapping@2.8.21: {}
+  baseline-browser-mapping@2.9.2: {}
 
   bcryptjs@3.0.2: {}
 
   browserslist@4.27.0:
     dependencies:
-      baseline-browser-mapping: 2.8.21
+      baseline-browser-mapping: 2.9.2
       caniuse-lite: 1.0.30001752
       electron-to-chromium: 1.5.244
       node-releases: 2.0.27

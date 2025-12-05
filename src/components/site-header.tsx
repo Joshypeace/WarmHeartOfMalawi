@@ -38,22 +38,22 @@ export function SiteHeader() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  const getDashboardLink = () => {
-    if (!user) return "/login"
-    switch (user.role) {
-      case "vendor": return "/vendor/dashboard"
-      case "admin": return "/admin/dashboard"
-      case "regional_admin": return "/regional-admin/dashboard"
-      case "customer": return "/customer/orders"
-      default: return "/customer/orders"
-    }
-  }
+  // const getDashboardLink = () => {
+  //   if (!user) return "/login"
+  //   switch (user.role) {
+  //     case "vendor": return "/vendor/dashboard"
+  //     case "admin": return "/admin/dashboard"
+  //     case "regional_admin": return "/regional-admin/dashboard"
+  //     case "customer": return "/customer/orders"
+  //     default: return "/customer/orders"
+  //   }
+  // }
 
-  const formatRoleDisplay = (role: UserRole) =>
-    role === "vendor" ? "Vendor"
-    : role === "admin" ? "Admin"
-    : role === "regional_admin" ? "Regional Admin"
-    : "Customer"
+  // const formatRoleDisplay = (role: UserRole) =>
+  //   role === "vendor" ? "Vendor"
+  //   : role === "admin" ? "Admin"
+  //   : role === "regional_admin" ? "Regional Admin"
+  //   : "Customer"
 
   const getRoleIcon = (role: UserRole) =>
     role === "vendor" ? <Store className="h-4 w-4" />
@@ -128,6 +128,7 @@ export function SiteHeader() {
         </div>
 
         {/* Navigation (Only Shop & Categories) */}
+        { ( user?.role === "customer" && "admin" && "regional_admin"   ) &&  (  
         <nav className="hidden lg:flex items-center gap-6 ml-4">
           <Link href="/shop" className="text-sm font-medium hover:text-primary">
             Shop
@@ -136,6 +137,7 @@ export function SiteHeader() {
             Categories
           </Link>
         </nav>
+      )}
 
         {/* Actions */}
         <div className="flex items-center gap-1 md:gap-2">
@@ -161,7 +163,7 @@ export function SiteHeader() {
           )}
 
           {/* Cart */}
-          {(user?.role === "customer" || user?.role === "vendor") && (
+          {(user?.role === "customer") && (
             <Link href="/cart">
               <Button variant="ghost" size="icon" className="relative h-9 w-9 md:h-11 md:w-11">
                 <ShoppingCart className="h-5 w-5" />
