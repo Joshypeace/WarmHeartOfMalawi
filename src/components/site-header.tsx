@@ -150,6 +150,16 @@ export function SiteHeader() {
             <Search className="h-5 w-5" />
           </Button>
 
+          { /* Wishlist - Onlu for customers */}
+
+          {user?.role === "customer" && (
+            <Link href="/customer/wishlist">
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 md:h-11 md:w-11">
+                <Heart className="h-5 w-5" />
+              </Button>
+            </Link>
+          )}
+
           {/* Cart */}
           {(user?.role === "customer" || user?.role === "vendor") && (
             <Link href="/cart">
