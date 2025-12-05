@@ -3,19 +3,20 @@
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Upload, Loader2, X, Image as ImageIcon } from "lucide-react"
+import { ArrowLeft, Upload, Loader2, X, Image as ImageIcon, Plus, Minus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import ProtectedRoute from "@/components/protected-route"
 import { useToast } from "@/hooks/use-toast"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
-const MAX_IMAGES = 10 // Increased from 5 to 10
+const MAX_IMAGES = 10
 
 interface ManagedCategory {
   id: string
@@ -33,7 +34,6 @@ function AddProductContent() {
   const [images, setImages] = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   
-  // Managed categories state
   const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   
@@ -41,11 +41,18 @@ function AddProductContent() {
     name: "",
     description: "",
     price: "",
-    category: "", // This will now store category ID
+    category: "",
     stock: "",
+    brand: "",
+    size: "",
+    color: "",
+    material: "",
+    featured: false,
   })
 
-  // Fetch managed categories
+  const [sizes, setSizes] = useState<string[]>([""])
+  const [colors, setColors] = useState<string[]>([""])
+
   useEffect(() => {
     const fetchManagedCategories = async () => {
       try {
@@ -75,6 +82,46 @@ function AddProductContent() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  const handleSwitchChange = (name: string, checked: boolean) => {
+    setFormData(prev => ({ ...prev, [name]: checked }))
+  }
+
+  const addSize = () => {
+    setSizes(prev => [...prev, ""])
+  }
+
+  const removeSize = (index: number) => {
+    if (sizes.length > 1) {
+      setSizes(prev => prev.filter((_, i) => i !== index))
+    }
+  }
+
+  const updateSize = (index: number, value: string) => {
+    setSizes(prev => {
+      const newSizes = [...prev]
+      newSizes[index] = value
+      return newSizes
+    })
+  }
+
+  const addColor = () => {
+    setColors(prev => [...prev, ""])
+  }
+
+  const removeColor = (index: number) => {
+    if (colors.length > 1) {
+      setColors(prev => prev.filter((_, i) => i !== index))
+    }
+  }
+
+  const updateColor = (index: number, value: string) => {
+    setColors(prev => {
+      const newColors = [...prev]
+      newColors[index] = value
+      return newColors
+    })
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
@@ -85,7 +132,6 @@ function AddProductContent() {
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
 
-      // Validate file type
       if (!ALLOWED_FILE_TYPES.includes(file.type)) {
         toast({
           title: "Invalid file type",
@@ -95,7 +141,6 @@ function AddProductContent() {
         continue
       }
 
-      // Validate file size
       if (file.size > MAX_FILE_SIZE) {
         toast({
           title: "File too large",
@@ -107,12 +152,10 @@ function AddProductContent() {
 
       newImages.push(file)
       
-      // Create preview
       const previewUrl = URL.createObjectURL(file)
       newPreviews.push(previewUrl)
     }
 
-    // Check image limit
     const totalImages = images.length + newImages.length
     if (totalImages > MAX_IMAGES) {
       const allowedNewImages = MAX_IMAGES - images.length
@@ -127,7 +170,6 @@ function AddProductContent() {
     setImages(prev => [...prev, ...newImages])
     setImagePreviews(prev => [...prev, ...newPreviews])
 
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -137,7 +179,7 @@ function AddProductContent() {
     setImages(prev => prev.filter((_, i) => i !== index))
     setImagePreviews(prev => {
       const newPreviews = [...prev]
-      URL.revokeObjectURL(newPreviews[index]) // Clean up memory
+      URL.revokeObjectURL(newPreviews[index])
       return newPreviews.filter((_, i) => i !== index)
     })
   }
@@ -147,7 +189,6 @@ function AddProductContent() {
     const files = Array.from(e.dataTransfer.files)
     
     if (files.length > 0) {
-      // Create a fake event to reuse the file selection logic
       const fakeEvent = {
         target: {
           files: e.dataTransfer.files
@@ -194,31 +235,37 @@ function AddProductContent() {
     setIsSubmitting(true)
 
     try {
-      // Upload images first
       let imageUrls: string[] = []
       if (images.length > 0) {
         imageUrls = await uploadImagesToServer(images)
       }
 
-      // Find the category name from the ID
       const selectedCategory = managedCategories.find(cat => cat.id === formData.category)
       
       if (!selectedCategory) {
         throw new Error("Please select a valid category")
       }
 
-      // Create product with backend API
+      const filteredSizes = sizes.filter(size => size.trim() !== "")
+      const filteredColors = colors.filter(color => color.trim() !== "")
+
+      const productData = {
+        ...formData,
+        category: selectedCategory.name,
+        categoryId: formData.category,
+        images: imageUrls,
+        size: filteredSizes.length > 0 ? filteredSizes.join(", ") : undefined,
+        color: filteredColors.length > 0 ? filteredColors.join(", ") : undefined,
+        brand: formData.brand.trim() || undefined,
+        material: formData.material.trim() || undefined,
+      }
+
       const response = await fetch("/api/vendor/products/new", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...formData,
-          category: selectedCategory.name, // Send category name for backward compatibility
-          categoryId: formData.category,   // Send category ID for new relation
-          images: imageUrls,
-        }),
+        body: JSON.stringify(productData),
       })
 
       const result = await response.json()
@@ -233,10 +280,8 @@ function AddProductContent() {
         variant: "default",
       })
 
-      // Clean up image preview URLs
       imagePreviews.forEach(preview => URL.revokeObjectURL(preview))
 
-      // Redirect to products page
       router.push("/vendor/products")
       
     } catch (error) {
@@ -278,7 +323,6 @@ function AddProductContent() {
               <CardTitle>Product Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Product Name */}
               <div className="space-y-2">
                 <Label htmlFor="name">Product Name *</Label>
                 <Input
@@ -296,7 +340,6 @@ function AddProductContent() {
                 </p>
               </div>
 
-              {/* Description */}
               <div className="space-y-2">
                 <Label htmlFor="description">Description *</Label>
                 <Textarea
@@ -315,7 +358,6 @@ function AddProductContent() {
                 </p>
               </div>
 
-              {/* Category - Updated to use managed categories */}
               <div className="space-y-2">
                 <Label htmlFor="category">Category *</Label>
                 <Select
@@ -354,7 +396,6 @@ function AddProductContent() {
                 )}
               </div>
 
-              {/* Price and Stock */}
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="price">Price (MWK) *</Label>
@@ -387,10 +428,144 @@ function AddProductContent() {
                 </div>
               </div>
 
-              {/* Product Images - Enhanced Section */}
-              <div className="space-y-4">
+              <div className="space-y-6 pt-6 border-t">
+                <h3 className="text-lg font-medium">Additional Details (Optional)</h3>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="images">Product Images</Label>
+                  <Label htmlFor="brand">Brand</Label>
+                  <Input
+                    id="brand"
+                    name="brand"
+                    placeholder="e.g., Apple, Nike, Local Brand"
+                    value={formData.brand}
+                    onChange={handleInputChange}
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty if not applicable
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Sizes</Label>
+                  <div className="space-y-2">
+                    {sizes.map((size, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="e.g., Small, Medium, Large, 10, 42, etc."
+                          value={size}
+                          onChange={(e) => updateSize(index, e.target.value)}
+                          disabled={isSubmitting}
+                          className="flex-1"
+                        />
+                        {sizes.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => removeSize(index)}
+                            disabled={isSubmitting}
+                            className="shrink-0"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addSize}
+                    disabled={isSubmitting}
+                    className="mt-2"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Size Option
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Add multiple sizes separated by commas. Leave empty if not applicable.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Colors</Label>
+                  <div className="space-y-2">
+                    {colors.map((color, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="e.g., Red, Blue, Black, #FF0000"
+                          value={color}
+                          onChange={(e) => updateColor(index, e.target.value)}
+                          disabled={isSubmitting}
+                          className="flex-1"
+                        />
+                        {colors.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => removeColor(index)}
+                            disabled={isSubmitting}
+                            className="shrink-0"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addColor}
+                    disabled={isSubmitting}
+                    className="mt-2"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Color Option
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Add multiple colors. Use color names or hex codes.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="material">Material</Label>
+                  <Input
+                    id="material"
+                    name="material"
+                    placeholder="e.g., Cotton, Leather, Wood, Metal"
+                    value={formData.material}
+                    onChange={handleInputChange}
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty if not applicable
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="featured" className="text-base">Featured Product</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Featured products appear prominently on the homepage
+                    </p>
+                  </div>
+                  <Switch
+                    id="featured"
+                    checked={formData.featured}
+                    onCheckedChange={(checked) => handleSwitchChange("featured", checked)}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-6 border-t">
+                <div className="space-y-2">
+                  <Label htmlFor="images">Product Images *</Label>
                   <p className="text-sm text-muted-foreground">
                     Upload up to {MAX_IMAGES} images. The first image will be used as the main display image.
                   </p>
@@ -407,7 +582,6 @@ function AddProductContent() {
                   disabled={isSubmitting}
                 />
                 
-                {/* Upload Area */}
                 <div
                   onClick={() => !isSubmitting && fileInputRef.current?.click()}
                   onDrop={handleDrop}
@@ -440,7 +614,6 @@ function AddProductContent() {
                   )}
                 </div>
 
-                {/* Enhanced Image Previews Grid */}
                 {imagePreviews.length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -479,7 +652,6 @@ function AddProductContent() {
                             )}
                           </div>
                           
-                          {/* Image Info */}
                           <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2">
                             <p className="text-xs truncate">
                               {images[index]?.name}
@@ -489,7 +661,6 @@ function AddProductContent() {
                             </p>
                           </div>
 
-                          {/* Remove Button */}
                           <Button
                             type="button"
                             size="sm"
@@ -501,14 +672,12 @@ function AddProductContent() {
                             <X className="h-3 w-3" />
                           </Button>
 
-                          {/* Drag Handle (for future reordering) */}
                           <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                             <ImageIcon className="h-3 w-3" />
                           </div>
                         </div>
                       ))}
                       
-                      {/* Add More Images Button */}
                       {imagePreviews.length < MAX_IMAGES && (
                         <div
                           onClick={() => !isSubmitting && fileInputRef.current?.click()}
@@ -522,7 +691,6 @@ function AddProductContent() {
                       )}
                     </div>
 
-                    {/* Image Tips */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <h4 className="font-medium text-blue-900 mb-2">Image Tips</h4>
                       <ul className="text-sm text-blue-800 space-y-1">
@@ -536,13 +704,12 @@ function AddProductContent() {
                 )}
               </div>
 
-              {/* Submit Button */}
               <div className="flex gap-3 pt-6 border-t">
                 <Button 
                   type="submit" 
                   className="flex-1" 
                   size="lg"
-                  disabled={!isFormValid || isSubmitting}
+                  disabled={!isFormValid || isSubmitting || images.length === 0}
                 >
                   {isSubmitting ? (
                     <>

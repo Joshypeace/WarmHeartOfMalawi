@@ -1,11 +1,9 @@
-// app/api/vendor/products/new/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
-// Updated validation schema with categoryId support
 const CreateProductSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Product name too long"),
   description: z.string().min(1, "Description is required").max(2000, "Description too long"),
@@ -16,8 +14,8 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  category: z.string().min(1, "Category is required"), // Category name for backward compatibility
-  categoryId: z.string().min(1, "Category ID is required"), // New field for managed categories
+  category: z.string().min(1, "Category is required"),
+  categoryId: z.string().min(1, "Category ID is required"),
   stock: z.string().transform(val => {
     const parsed = parseInt(val)
     if (isNaN(parsed) || parsed < 0) {
@@ -25,12 +23,16 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  images: z.array(z.string()).max(10, "Maximum 10 images allowed").default([]),
+  images: z.array(z.string()).max(10, "Maximum 10 images allowed").min(1, "At least one image is required"),
+  brand: z.string().optional().nullable().default(null),
+  size: z.string().optional().nullable().default(null),
+  color: z.string().optional().nullable().default(null),
+  material: z.string().optional().nullable().default(null),
+  featured: z.boolean().default(false),
 })
 
 export async function POST(request: NextRequest) {
   try {
-    // Authentication check
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.email) {
@@ -40,7 +42,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user with vendor shop
     const user = await prisma.user.findUnique({
       where: { 
         email: session.user.email,
@@ -65,7 +66,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Parse and validate request body
     let body
     try {
       body = await request.json()
@@ -76,7 +76,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate input data
     const validationResult = CreateProductSchema.safeParse(body)
     if (!validationResult.success) {
       const errorMessages = validationResult.error.errors.map(err => err.message).join(", ")
@@ -86,9 +85,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { name, description, price, category, categoryId, stock, images } = validationResult.data
+    const { 
+      name, 
+      description, 
+      price, 
+      category, 
+      categoryId, 
+      stock, 
+      images,
+      brand,
+      size,
+      color,
+      material,
+      featured 
+    } = validationResult.data
 
-    // Verify that the category exists and is active
     const categoryExists = await prisma.category.findFirst({
       where: {
         id: categoryId,
@@ -103,7 +114,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if vendor has reached product limit
     const productCount = await prisma.product.count({
       where: { vendorId: user.id }
     })
@@ -116,25 +126,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate images array
     const validImages = Array.isArray(images) ? images.slice(0, 10) : []
 
-    // Create product in database with both category and categoryId
     const product = await prisma.product.create({
       data: {
         name,
         description,
         price,
-        category, // Keep for backward compatibility
-        categoryId, // New field for managed categories
+        category,
+        categoryId,
         stockCount: stock,
         inStock: stock > 0,
         images: validImages,
         vendorId: user.id,
         shopId: user.vendorShop.id,
-        // featured: false,
-        // rating: null,
-        // reviews: null,
+        brand: brand?.trim() || null,
+        size: size?.trim() || null,
+        color: color?.trim() || null,
+        material: material?.trim() || null,
+        featured,
+        rating: 0.0,
+        reviews: 0,
       },
       include: {
         vendor: {
@@ -157,8 +169,6 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log(`Product created: ${product.id} with category "${product.categoryRef?.name}" by vendor: ${user.id}`)
-
     return NextResponse.json({
       success: true,
       message: `Product created successfully with ${validImages.length} images`,
@@ -168,12 +178,16 @@ export async function POST(request: NextRequest) {
           name: product.name,
           description: product.description,
           price: product.price,
-          category: product.categoryRef?.name || product.category, // Use managed category name if available
+          category: product.categoryRef?.name || product.category,
           categoryId: product.categoryId,
           stockCount: product.stockCount,
           inStock: product.inStock,
           images: product.images,
           featured: product.featured,
+          brand: product.brand,
+          size: product.size,
+          color: product.color,
+          material: product.material,
           vendorName: product.shop?.name || `${product.vendor.firstName} ${product.vendor.lastName}`,
           createdAt: product.createdAt,
         }
@@ -184,7 +198,6 @@ export async function POST(request: NextRequest) {
     console.error("Product creation error:", error)
 
     if (error instanceof Error) {
-      // Handle specific Prisma errors
       if (error.message.includes("prisma") || error.message.includes("database")) {
         return NextResponse.json(
           { error: "Database error occurred while creating product" },
@@ -192,7 +205,6 @@ export async function POST(request: NextRequest) {
         )
       }
       
-      // Handle foreign key constraint errors (invalid categoryId)
       if (error.message.includes("foreign key constraint") || error.message.includes("categoryId")) {
         return NextResponse.json(
           { error: "Invalid category selected. Please choose a valid category." },

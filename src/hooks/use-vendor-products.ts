@@ -1,4 +1,3 @@
-// src/hooks/use-vendor-products.ts
 import { useState, useEffect } from 'react';
 
 interface Product {
@@ -14,6 +13,13 @@ interface Product {
   createdAt: string;
   updatedAt: string;
   vendorId: string;
+  brand: string | null;
+  size: string | null;
+  color: string | null;
+  material: string | null;
+  featured: boolean;
+  rating: number;
+  reviews: number;
 }
 
 export function useVendorProducts(searchQuery: string = '') {
@@ -60,7 +66,6 @@ export function useVendorProducts(searchQuery: string = '') {
         throw new Error(errorData.error || 'Failed to delete product');
       }
 
-      // Remove product from local state
       setProducts(prevProducts => prevProducts.filter(product => product.id !== productId));
       return true;
     } catch (err) {
