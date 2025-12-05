@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, SlidersHorizontal, Star, Package, X } from "lucide-react"
+import { Search, SlidersHorizontal, Star, Package, X, Tag, Palette, Ruler, Package2, Shield, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -14,13 +14,34 @@ import { useToast } from "@/hooks/use-toast"
 import { useShopProducts } from "@/hooks/use-shop-products"
 import { useCategories } from "@/hooks/use-categories"
 
+interface ProductDetails {
+  id: string
+  name: string
+  description: string
+  price: number
+  images: string[]
+  category: string
+  inStock: boolean
+  stockCount: number
+  featured: boolean
+  rating: number | null
+  reviews: number | null
+  vendorName: string
+  createdAt: string
+  // New optional fields
+  brand?: string | null
+  size?: string | null
+  color?: string | null
+  material?: string | null
+}
+
 export default function ShopPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [sortBy, setSortBy] = useState("featured")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
   
-  // Use SWR hooks - now fetching from /api/admin/categories
   const { products, loading, error } = useShopProducts({
     search: searchQuery,
     category: selectedCategory === "all" ? "" : selectedCategory,
@@ -32,10 +53,9 @@ export default function ShopPage() {
   const { addItem } = useCart()
   const { toast } = useToast()
 
-  // Get active categories with products
   const activeCategories = categories.filter(cat => cat.isActive && cat.productCount > 0)
 
-  const handleAddToCart = (product: any) => {
+  const handleAddToCart = (product: ProductDetails) => {
     addItem(String(product.id))
     toast({
       title: "Added to cart",
@@ -68,6 +88,32 @@ export default function ShopPage() {
     )
   }
 
+  const toggleProductDetails = (productId: string) => {
+    setExpandedProductId(expandedProductId === productId ? null : productId)
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - date.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 1) return "Today"
+    if (diffDays <= 7) return `${diffDays} days ago`
+    
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: new Date().getFullYear() !== date.getFullYear() ? 'numeric' : undefined
+    })
+  }
+
+  // Parse sizes and colors from comma-separated strings
+  const parseDetails = (detailString: string | null | undefined) => {
+    if (!detailString) return []
+    return detailString.split(',').map(item => item.trim()).filter(item => item)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-4 md:py-6 px-4 md:px-6 max-w-7xl mx-auto">
@@ -75,7 +121,7 @@ export default function ShopPage() {
         <div className="mb-4 md:mb-6">
           <h1 className="text-2xl md:text-3xl font-bold mb-1">Shop All Products</h1>
           <p className="text-sm text-muted-foreground">
-            Discover authentic Malawian products from local artisans and vendors
+            Discover authentic Malawian products from local artisans and vendors with complete details
           </p>
         </div>
 
@@ -285,59 +331,189 @@ export default function ShopPage() {
             {/* Product Grid */}
             {!loading && !error && products.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-                {products.map((product) => (
-                  <Card key={product.id} className="group overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
-                    <Link href={`/shop/${product.id}`}>
-                      <div className="relative aspect-square overflow-hidden bg-muted">
-                        <Image
-                          src={product.images[0] || "/placeholder.svg"}
-                          alt={product.name}
-                          fill
-                          className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                        {product.featured && (
-                          <Badge className="absolute top-1 right-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5">
-                            Featured
-                          </Badge>
-                        )}
-                        {!product.inStock && (
-                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                            <Badge variant="secondary" className="bg-white text-black text-xs">
-                              Out of Stock
+                {products.map((product: ProductDetails) => {
+                  const isExpanded = expandedProductId === product.id
+                  const sizes = parseDetails(product.size)
+                  const colors = parseDetails(product.color)
+                  
+                  return (
+                    <Card key={product.id} className="group overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
+                      {/* Product Image */}
+                      <Link href={`/shop/${product.id}`}>
+                        <div className="relative aspect-square overflow-hidden bg-muted">
+                          <Image
+                            src={product.images[0] || "/placeholder.svg"}
+                            alt={product.name}
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          {product.featured && (
+                            <Badge className="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5">
+                              <Star className="h-2.5 w-2.5 mr-0.5" />
+                              Featured
+                            </Badge>
+                          )}
+                          {!product.inStock && (
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                              <Badge variant="secondary" className="bg-white text-black text-xs">
+                                Out of Stock
+                              </Badge>
+                            </div>
+                          )}
+                          <div className="absolute bottom-1 left-1">
+                            <Badge variant="outline" className="bg-white/90 text-xs">
+                              {formatDate(product.createdAt)}
                             </Badge>
                           </div>
-                        )}
-                      </div>
-                    </Link>
-                    <CardContent className="p-2 md:p-3 flex-1 flex flex-col">
-                      <Link href={`/shop/${product.id}`}>
-                        <h3 className="font-semibold text-xs md:text-sm mb-1 group-hover:text-primary transition-colors line-clamp-2">
-                          {product.name}
-                        </h3>
+                        </div>
                       </Link>
-                      <div className="flex items-center gap-1 mb-1">
-                        {renderRatingStars(product.rating)}
-                        <span className="text-xs text-muted-foreground">
-                          ({formatReviewCount(product.reviews)})
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">{product.vendorName}</p>
-                      <div className="mt-auto pt-2">
-                        <p className="text-base md:text-lg font-bold">MWK {product.price.toLocaleString()}</p>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="p-2 md:p-3 pt-0">
-                      <Button
-                        onClick={() => handleAddToCart(product)}
-                        size="sm"
-                        className="w-full h-8 text-xs"
-                        disabled={!product.inStock}
-                      >
-                        {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))}
+                      
+                      <CardContent className="p-2 md:p-3 flex-1 flex flex-col">
+                        {/* Product Name and Vendor */}
+                        <Link href={`/shop/${product.id}`}>
+                          <h3 className="font-semibold text-xs md:text-sm mb-1 group-hover:text-primary transition-colors line-clamp-2">
+                            {product.name}
+                          </h3>
+                        </Link>
+                        <p className="text-xs text-muted-foreground truncate mb-2">{product.vendorName}</p>
+                        
+                        {/* Rating */}
+                        <div className="flex items-center gap-1 mb-2">
+                          {renderRatingStars(product.rating)}
+                          <span className="text-xs text-muted-foreground">
+                            ({formatReviewCount(product.reviews)})
+                          </span>
+                        </div>
+                        
+                        {/* Quick Details */}
+                        <div className="space-y-1 mb-2">
+                          {/* Brand */}
+                          {product.brand && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <Tag className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Brand:</span>
+                              <span className="font-medium">{product.brand}</span>
+                            </div>
+                          )}
+                          
+                          {/* Sizes */}
+                          {sizes.length > 0 && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <Ruler className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Sizes:</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {sizes.map((size, index) => (
+                                  <Badge key={index} variant="outline" className="text-[10px] py-0 px-1.5">
+                                    {size}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Colors */}
+                          {colors.length > 0 && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <Palette className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Colors:</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {colors.map((color, index) => (
+                                  <Badge key={index} variant="outline" className="text-[10px] py-0 px-1.5">
+                                    {color}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Material */}
+                          {product.material && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <Package2 className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Material:</span>
+                              <span className="font-medium">{product.material}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Stock Status */}
+                        <div className="mb-2">
+                          {product.stockCount > 0 ? (
+                            <div className="flex items-center gap-1 text-xs text-green-600">
+                              <Shield className="h-3 w-3" />
+                              <span>In Stock: {product.stockCount} units</span>
+                            </div>
+                          ) : product.inStock ? (
+                            <div className="flex items-center gap-1 text-xs text-yellow-600">
+                              <Truck className="h-3 w-3" />
+                              <span>Limited Stock Available</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-xs text-red-600">
+                              <Package className="h-3 w-3" />
+                              <span>Out of Stock</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Price */}
+                        <div className="mt-auto pt-2 border-t">
+                          <p className="text-base md:text-lg font-bold">MWK {product.price.toLocaleString()}</p>
+                        </div>
+                      </CardContent>
+                      
+                      {/* Action Buttons */}
+                      <CardFooter className="p-2 md:p-3 pt-0 space-y-2">
+                        <Button
+                          onClick={() => handleAddToCart(product)}
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          disabled={!product.inStock}
+                        >
+                          {product.inStock ? 'Add to Cart' : 'Out of Stock'}
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-7 text-xs"
+                          onClick={() => toggleProductDetails(product.id)}
+                        >
+                          {isExpanded ? 'Show Less' : 'More Details'}
+                        </Button>
+                        
+                        {/* Expanded Details */}
+                        {isExpanded && (
+                          <div className="mt-2 p-2 bg-muted/50 rounded-md space-y-2 text-xs">
+                            <div>
+                              <strong className="text-muted-foreground">Description:</strong>
+                              <p className="mt-1 line-clamp-3">{product.description}</p>
+                            </div>
+                            
+                            <div>
+                              <strong className="text-muted-foreground">Category:</strong>
+                              <Badge variant="secondary" className="ml-1 text-xs">
+                                {product.category}
+                              </Badge>
+                            </div>
+                            
+                            {product.images.length > 1 && (
+                              <div>
+                                <strong className="text-muted-foreground">Additional Images:</strong>
+                                <p className="mt-1">{product.images.length - 1} more images available</p>
+                              </div>
+                            )}
+                            
+                            <div>
+                              <strong className="text-muted-foreground">Listed:</strong>
+                              <p className="mt-1">{formatDate(product.createdAt)}</p>
+                            </div>
+                          </div>
+                        )}
+                      </CardFooter>
+                    </Card>
+                  )
+                })}
               </div>
             )}
 
@@ -376,10 +552,28 @@ export default function ShopPage() {
             <div className="mt-8">
               <Card className="border-primary/20 bg-primary/5">
                 <CardContent className="py-6">
-                  <h3 className="text-lg font-semibold mb-2">Can't find what you're looking for?</h3>
+                  <h3 className="text-lg font-semibold mb-2">Complete Product Information</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Explore our categories or contact vendors directly for custom requests.
+                    All products now include detailed information like brand, sizes, colors, materials, and stock levels to help you make informed decisions.
                   </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="flex items-center gap-2">
+                      <Tag className="h-4 w-4 text-primary" />
+                      <span className="text-xs">Brand Details</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Ruler className="h-4 w-4 text-primary" />
+                      <span className="text-xs">Multiple Sizes</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-4 w-4 text-primary" />
+                      <span className="text-xs">Color Options</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Package2 className="h-4 w-4 text-primary" />
+                      <span className="text-xs">Material Info</span>
+                    </div>
+                  </div>
                   <div className="flex gap-3">
                     <Button asChild variant="outline" size="sm">
                       <Link href="/categories">
