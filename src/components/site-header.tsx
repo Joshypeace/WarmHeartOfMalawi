@@ -84,7 +84,7 @@ export function SiteHeader() {
         ]
       case "customer":
         return [
-          { href: "/customer/profile", label: "My Profile", icon: <Package className="h-4 w-4" /> },
+          { href: "/profile", label: "My Profile", icon: <User className="h-4 w-4" /> },
           { href: "/customer/orders", label: "My Orders", icon: <Package className="h-4 w-4" /> },
           { href: "/customer/wishlist", label: "Wishlist", icon: <Heart className="h-4 w-4" /> },
         ]
