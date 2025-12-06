@@ -39,6 +39,12 @@ export async function GET(
             district: true,
             logo: true
           }
+        },
+        categoryRef: {
+          select: {
+            id: true,
+            name: true
+          }
         }
       }
     })
@@ -70,22 +76,34 @@ export async function GET(
             name: true,
             district: true
           }
+        },
+        categoryRef: {
+          select: {
+            id: true,
+            name: true
+          }
         }
       }
     })
 
-    // ✅ USE REAL DATA FROM DATABASE
+    // ✅ FIXED: Use stockCount not stock
     const transformedProduct = {
       id: product.id,
       name: product.name,
       description: product.description,
       price: product.price,
       images: product.images,
-      category: product.category,
+      category: product.categoryRef?.name || product.category, // Use categoryRef name if available
+      categoryId: product.categoryId,
       inStock: product.inStock,
-      stock: product.stockCount,
-      rating: product.rating, // ✅ REAL RATING FROM DATABASE
-      reviews: product.reviews, // ✅ REAL REVIEWS COUNT FROM DATABASE
+      stockCount: product.stockCount, // ✅ CHANGED FROM stock TO stockCount
+      featured: product.featured,
+      rating: product.rating,
+      reviews: product.reviews,
+      brand: product.brand,
+      size: product.size,
+      color: product.color,
+      material: product.material,
       vendorId: product.vendorId,
       vendorName: product.vendor.vendorShop?.name || `${product.vendor.firstName} ${product.vendor.lastName}`,
       vendorShop: product.shop ? {
@@ -99,18 +117,24 @@ export async function GET(
       updatedAt: product.updatedAt.toISOString()
     }
 
-    // ✅ USE REAL DATA FOR RELATED PRODUCTS TOO
+    // ✅ FIXED: Use stockCount not stock
     const transformedRelatedProducts = relatedProducts.map(rp => ({
       id: rp.id,
       name: rp.name,
       description: rp.description,
       price: rp.price,
       images: rp.images,
-      category: rp.category,
+      category: rp.categoryRef?.name || rp.category,
+      categoryId: rp.categoryId,
       inStock: rp.inStock,
-      stock: rp.stockCount,
-      rating: rp.rating, // ✅ REAL RATING FROM DATABASE
-      reviews: rp.reviews, // ✅ REAL REVIEWS COUNT FROM DATABASE
+      stockCount: rp.stockCount, // ✅ CHANGED FROM stock TO stockCount
+      featured: rp.featured,
+      rating: rp.rating,
+      reviews: rp.reviews,
+      brand: rp.brand,
+      size: rp.size,
+      color: rp.color,
+      material: rp.material,
       vendorId: rp.vendorId,
       vendorName: rp.shop?.name || `${rp.vendor.firstName} ${rp.vendor.lastName}`
     }))

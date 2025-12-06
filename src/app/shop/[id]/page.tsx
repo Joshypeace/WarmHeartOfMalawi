@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Star, Minus, Plus, ShoppingCart, Heart, Share2, ArrowLeft, Store } from "lucide-react"
+import { Star, Minus, Plus, ShoppingCart, Heart, Share2, ArrowLeft, Store, Tag, Ruler, Palette, Package2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -190,6 +190,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
+  // Parse sizes and colors from comma-separated strings
+  const parseDetails = (detailString: string | null) => {
+    if (!detailString) return []
+    return detailString.split(',').map(item => item.trim()).filter(item => item)
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -234,6 +240,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
+  // ✅ FIXED: Use stockCount > 0 as the availability check (consistent with shop page)
+  const isProductAvailable = product.stockCount > 0
+  const availableStock = product.stockCount
+
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) {
       addItem(String(product.id))
@@ -245,7 +255,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   }
 
   // Get the proper category name
-  const displayCategory = getCategoryName(null, product.category)
+  const displayCategory = getCategoryName(product.categoryId, product.category)
+  
+  // Parse product details
+  const sizes = parseDetails(product.size)
+  const colors = parseDetails(product.color)
 
   // Share product function
   const handleShare = async () => {
@@ -273,6 +287,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - date.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 1) return "Today"
+    if (diffDays <= 7) return `${diffDays} days ago`
+    
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: new Date().getFullYear() !== date.getFullYear() ? 'numeric' : undefined
+    })
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-4 md:py-6 lg:py-8 px-4 md:px-6 max-w-7xl mx-auto">
@@ -291,7 +322,14 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 alt={product.name} 
                 fill 
                 className="object-cover" 
+                priority
               />
+              {product.featured && (
+                <Badge className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1">
+                  <Star className="h-3 w-3 mr-1" />
+                  Featured
+                </Badge>
+              )}
             </div>
             {product.images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto">
@@ -340,14 +378,90 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </Link>
             </div>
 
+            {/* Product Details Section */}
+            <div className="mb-4 md:mb-6 p-4 border rounded-lg bg-muted/30">
+              <h3 className="font-semibold mb-3 text-sm md:text-base">Product Details</h3>
+              <div className="grid grid-cols-2 gap-3 md:gap-4">
+                {/* Brand */}
+                {product.brand && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Tag className="h-3 w-3" />
+                      <span>Brand</span>
+                    </div>
+                    <p className="text-sm font-medium">{product.brand}</p>
+                  </div>
+                )}
+
+                {/* Sizes */}
+                {sizes.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Ruler className="h-3 w-3" />
+                      <span>Sizes</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {sizes.map((size, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs py-0.5 px-2">
+                          {size}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Colors */}
+                {colors.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Palette className="h-3 w-3" />
+                      <span>Colors</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {colors.map((color, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs py-0.5 px-2">
+                          {color}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Material */}
+                {product.material && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Package2 className="h-3 w-3" />
+                      <span>Material</span>
+                    </div>
+                    <p className="text-sm font-medium">{product.material}</p>
+                  </div>
+                )}
+
+                {/* Stock Count */}
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">Stock Available</div>
+                  <p className={`text-sm font-medium ${isProductAvailable ? 'text-green-600' : 'text-red-600'}`}>
+                    {isProductAvailable ? `${availableStock} units` : 'Out of stock'}
+                  </p>
+                </div>
+
+                {/* Listed Date */}
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">Listed</div>
+                  <p className="text-sm font-medium">{formatDate(product.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+
             <Separator className="my-3 md:my-4" />
 
             <div className="mb-4 md:mb-6">
               <p className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2">
                 MWK {product.price.toLocaleString()}
               </p>
-              <p className="text-xs md:text-sm text-muted-foreground">
-                {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
+              <p className={`text-xs md:text-sm ${isProductAvailable ? 'text-green-600' : 'text-red-600'}`}>
+                {isProductAvailable ? `${availableStock} units available` : "Currently unavailable"}
               </p>
             </div>
 
@@ -367,8 +481,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                  disabled={quantity >= product.stock}
+                  onClick={() => setQuantity(Math.min(availableStock, quantity + 1))}
+                  disabled={!isProductAvailable || quantity >= availableStock}
                   className="h-9 w-9 md:h-10 md:w-10"
                 >
                   <Plus className="h-4 w-4" />
@@ -380,10 +494,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               <Button
                 onClick={handleAddToCart}
                 className="flex-1 h-11 md:h-12 text-sm md:text-base"
-                disabled={!product.inStock || product.stock === 0}
+                disabled={!isProductAvailable}
               >
                 <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 mr-2" />
-                {product.inStock && product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
+                {isProductAvailable ? 'Add to Cart' : 'Out of Stock'}
               </Button>
               
               {/* Wishlist Button */}
@@ -408,17 +522,67 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <TabsTrigger value="description" className="text-xs md:text-sm">
                   Description
                 </TabsTrigger>
+                <TabsTrigger value="specifications" className="text-xs md:text-sm">
+                  Specifications
+                </TabsTrigger>
                 <TabsTrigger value="vendor" className="text-xs md:text-sm">
                   Vendor
-                </TabsTrigger>
-                <TabsTrigger value="shipping" className="text-xs md:text-sm">
-                  Shipping
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="description" className="mt-3 md:mt-4">
                 <p className="text-muted-foreground text-sm md:text-base text-pretty leading-relaxed">
                   {product.description}
                 </p>
+              </TabsContent>
+              <TabsContent value="specifications" className="mt-3 md:mt-4">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Category</h4>
+                      <p className="text-sm">{displayCategory}</p>
+                    </div>
+                    {product.brand && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-1">Brand</h4>
+                        <p className="text-sm">{product.brand}</p>
+                      </div>
+                    )}
+                    {product.material && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-1">Material</h4>
+                        <p className="text-sm">{product.material}</p>
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Stock Status</h4>
+                      <p className="text-sm">{isProductAvailable ? 'In Stock' : 'Out of Stock'}</p>
+                    </div>
+                  </div>
+                  {sizes.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Available Sizes</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {sizes.map((size, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {size}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {colors.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Available Colors</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {colors.map((color, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {color}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </TabsContent>
               <TabsContent value="vendor" className="mt-3 md:mt-4">
                 <div className="space-y-3">
@@ -450,12 +614,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                   </Button>
                 </div>
               </TabsContent>
-              <TabsContent value="shipping" className="mt-3 md:mt-4">
-                <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
-                  Free shipping on orders over MWK 10,000. Standard delivery takes 3-5 business days within Malawi.
-                  Express delivery available for an additional fee.
-                </p>
-              </TabsContent>
             </Tabs>
           </div>
         </div>
@@ -466,43 +624,47 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               Related Products
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
-              {relatedProducts.map((relatedProduct) => (
-                <Card key={relatedProduct.id} className="group overflow-hidden hover:shadow-lg transition-shadow">
-                  <Link href={`/shop/${relatedProduct.id}`}>
-                    <div className="relative aspect-square overflow-hidden bg-muted">
-                      <Image
-                        src={relatedProduct.images[0] || "/placeholder.svg"}
-                        alt={relatedProduct.name}
-                        fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      {!relatedProduct.inStock && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                          <Badge variant="secondary" className="bg-white text-black text-xs">
-                            Out of Stock
-                          </Badge>
-                        </div>
-                      )}
-                    </div>
-                  </Link>
-                  <CardContent className="p-3 md:p-4">
+              {relatedProducts.map((relatedProduct) => {
+                const isRelatedAvailable = relatedProduct.stockCount > 0
+                
+                return (
+                  <Card key={relatedProduct.id} className="group overflow-hidden hover:shadow-lg transition-shadow">
                     <Link href={`/shop/${relatedProduct.id}`}>
-                      <h3 className="font-semibold text-xs md:text-sm mb-1 group-hover:text-primary transition-colors line-clamp-1">
-                        {relatedProduct.name}
-                      </h3>
+                      <div className="relative aspect-square overflow-hidden bg-muted">
+                        <Image
+                          src={relatedProduct.images[0] || "/placeholder.svg"}
+                          alt={relatedProduct.name}
+                          fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        {!isRelatedAvailable && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <Badge variant="secondary" className="bg-white text-black text-xs">
+                              Out of Stock
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
                     </Link>
-                    <div className="flex items-center gap-1 mb-1 md:mb-2">
-                      <Star className={`h-3 w-3 md:h-4 md:w-4 ${(relatedProduct.rating || 0) > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
-                      <span className="text-xs md:text-sm font-medium">
-                        {relatedProduct.rating ? relatedProduct.rating.toFixed(1) : "0.0"}
-                      </span>
-                    </div>
-                    <p className="text-sm md:text-base lg:text-lg font-bold">
-                      MWK {relatedProduct.price.toLocaleString()}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+                    <CardContent className="p-3 md:p-4">
+                      <Link href={`/shop/${relatedProduct.id}`}>
+                        <h3 className="font-semibold text-xs md:text-sm mb-1 group-hover:text-primary transition-colors line-clamp-1">
+                          {relatedProduct.name}
+                        </h3>
+                      </Link>
+                      <div className="flex items-center gap-1 mb-1 md:mb-2">
+                        <Star className={`h-3 w-3 md:h-4 md:w-4 ${(relatedProduct.rating || 0) > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+                        <span className="text-xs md:text-sm font-medium">
+                          {relatedProduct.rating ? relatedProduct.rating.toFixed(1) : "0.0"}
+                        </span>
+                      </div>
+                      <p className="text-sm md:text-base lg:text-lg font-bold">
+                        MWK {relatedProduct.price.toLocaleString()}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           </div>
         )}

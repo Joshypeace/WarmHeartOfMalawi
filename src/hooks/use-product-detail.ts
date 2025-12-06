@@ -1,4 +1,3 @@
-// hooks/use-product-detail.ts
 import { useState, useEffect } from 'react'
 
 interface Product {
@@ -8,19 +7,24 @@ interface Product {
   price: number
   images: string[]
   category: string
+  categoryId: string | null
   inStock: boolean
-  stock: number
+  stockCount: number
   featured: boolean
-  rating: number | null // Make sure this matches your schema
-  reviews: number | null // Make sure this matches your schema
+  rating: number | null
+  reviews: number | null
+  brand: string | null
+  size: string | null
+  color: string | null
+  material: string | null
   vendorId: string
   vendorName: string
   vendorShop?: {
     id: string
     name: string
-    description: string
-    district: string
-    logo?: string
+    description: string | null
+    district: string | null
+    logo?: string | null
   }
   createdAt: string
   updatedAt: string
@@ -34,9 +38,13 @@ interface RelatedProduct {
   images: string[]
   category: string
   inStock: boolean
-  stock: number
-  rating: number | null // Make sure this is included
-  reviews: number | null // Make sure this is included
+  stockCount: number
+  rating: number | null
+  reviews: number | null
+  brand: string | null
+  size: string | null
+  color: string | null
+  material: string | null
   vendorId: string
   vendorName: string
 }
@@ -71,8 +79,28 @@ export function useProductDetail(productId: string) {
         const data: ApiResponse = await response.json()
 
         if (data.success && data.data) {
-          setProduct(data.data.product)
-          setRelatedProducts(data.data.relatedProducts)
+          // ✅ Handle backward compatibility
+          const normalizedProduct = {
+            ...data.data.product,
+            // If stockCount is undefined but stock exists, use stock
+            stockCount: data.data.product.stockCount ?? data.data.product.inStock ?? 0,
+            // Remove old stock property to avoid confusion
+            ...(data.data.product.inStock && { stock: undefined })
+          }
+          
+          const normalizedRelated = data.data.relatedProducts.map(rp => ({
+            ...rp,
+            stockCount: rp.stockCount ?? rp.inStock ?? 0,
+            ...(rp.inStock && { stock: undefined })
+          }))
+          
+          console.log('🔍 API Response Check:', {
+            original: data.data.product,
+            normalized: normalizedProduct
+          })
+          
+          setProduct(normalizedProduct)
+          setRelatedProducts(normalizedRelated)
         } else {
           throw new Error(data.error || 'Product not found')
         }
