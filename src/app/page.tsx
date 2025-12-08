@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight } from "lucide-react"
+import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +15,16 @@ const generateConsistentDiscounts = () => {
   return fixedDiscounts
 }
 
+// Define category interface based on your API response
+interface Category {
+  id: string
+  name: string
+  description: string | null
+  image: string | null
+  isActive: boolean
+  productCount: number
+}
+
 export default function HomePage() {
   const heroProducts = mockProducts.slice(0, 5)
   const [currentSlide, setCurrentSlide] = useState(0)
@@ -23,6 +33,9 @@ export default function HomePage() {
   
   // Use consistent discounts to avoid hydration errors
   const [discounts, setDiscounts] = useState<number[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [categoriesError, setCategoriesError] = useState<string | null>(null)
   
   // Refs for horizontal scrolling
   const categoriesRef = useRef<HTMLDivElement>(null)
@@ -33,6 +46,70 @@ export default function HomePage() {
   useEffect(() => {
     setDiscounts(generateConsistentDiscounts())
   }, [])
+
+  // Fetch categories from API
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true)
+        setCategoriesError(null)
+        
+        const response = await fetch('/api/admin/categories')
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch categories: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        
+        if (result.success) {
+          // Filter only categories with products and are active
+          const activeCategories = result.data.categories.filter(
+            (cat: Category) => cat.isActive && cat.productCount > 0
+          )
+          setCategories(activeCategories)
+        } else {
+          throw new Error(result.error || 'Failed to load categories')
+        }
+      } catch (err) {
+        console.error('Error fetching categories:', err)
+        setCategoriesError(err instanceof Error ? err.message : 'Failed to load categories')
+        // Fallback to mock categories if API fails
+        setCategories(getFallbackCategories())
+      } finally {
+        setCategoriesLoading(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
+
+  // Fallback categories if API fails
+  const getFallbackCategories = (): Category[] => {
+    const fallbackCategories = [
+      { name: "Crafts", icon: "🖼️", color: "bg-blue-100 text-blue-700" },
+      { name: "Fashion", icon: "👕", color: "bg-pink-100 text-pink-700" },
+      { name: "Food", icon: "🍎", color: "bg-green-100 text-green-700" },
+      { name: "Home Decor", icon: "🏠", color: "bg-amber-100 text-amber-700" },
+      { name: "Jewelry", icon: "💎", color: "bg-purple-100 text-purple-700" },
+      { name: "Accessories", icon: "🎒", color: "bg-cyan-100 text-cyan-700" },
+      { name: "Electronics", icon: "📱", color: "bg-indigo-100 text-indigo-700" },
+      { name: "Beauty", icon: "💄", color: "bg-rose-100 text-rose-700" },
+      { name: "Books", icon: "📚", color: "bg-orange-100 text-orange-700" },
+      { name: "Sports", icon: "⚽", color: "bg-emerald-100 text-emerald-700" },
+    ]
+    
+    return fallbackCategories.map((cat, index) => ({
+      id: `fallback-${index}`,
+      name: cat.name,
+      description: null,
+      image: null,
+      isActive: true,
+      productCount: 10, // Default product count for fallback
+      icon: cat.icon,
+      color: cat.color
+    }))
+  }
 
   // Scroll functions
   const scrollCategories = (direction: 'left' | 'right') => {
@@ -65,6 +142,7 @@ export default function HomePage() {
     }
   }
 
+  // Auto-rotate hero slider
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % heroProducts.length)
@@ -73,20 +151,25 @@ export default function HomePage() {
   }, [heroProducts.length])
 
   const nextSlide = () => setCurrentSlide((p) => (p + 1) % heroProducts.length)
-  const prevSlide = () =>
-    setCurrentSlide((p) => (p - 1 + heroProducts.length) % heroProducts.length)
+  const prevSlide = () => setCurrentSlide((p) => (p - 1 + heroProducts.length) % heroProducts.length)
 
-  const categories = [
-    { name: "Crafts", icon: "🖼️", color: "bg-blue-100 text-blue-700" },
-    { name: "Fashion", icon: "👕", color: "bg-pink-100 text-pink-700" },
-    { name: "Food", icon: "🍎", color: "bg-green-100 text-green-700" },
-    { name: "Home Decor", icon: "🏠", color: "bg-amber-100 text-amber-700" },
-    { name: "Jewelry", icon: "💎", color: "bg-purple-100 text-purple-700" },
-    { name: "Accessories", icon: "🎒", color: "bg-cyan-100 text-cyan-700" },
-    { name: "Electronics", icon: "📱", color: "bg-indigo-100 text-indigo-700" },
-    { name: "Beauty", icon: "💄", color: "bg-rose-100 text-rose-700" },
-    { name: "Books", icon: "📚", color: "bg-orange-100 text-orange-700" },
-    { name: "Sports", icon: "⚽", color: "bg-emerald-100 text-emerald-700" },
+  // Predefined colors for categories (used when category doesn't have image)
+  const categoryColors = [
+    "bg-blue-100 text-blue-700",
+    "bg-pink-100 text-pink-700", 
+    "bg-green-100 text-green-700",
+    "bg-amber-100 text-amber-700",
+    "bg-purple-100 text-purple-700",
+    "bg-cyan-100 text-cyan-700",
+    "bg-indigo-100 text-indigo-700",
+    "bg-rose-100 text-rose-700",
+    "bg-orange-100 text-orange-700",
+    "bg-emerald-100 text-emerald-700",
+  ]
+
+  // Predefined icons for categories (used when category doesn't have image)
+  const categoryIcons = [
+    "🖼️", "👕", "🍎", "🏠", "💎", "🎒", "📱", "💄", "📚", "⚽"
   ]
 
   return (
@@ -148,6 +231,7 @@ export default function HomePage() {
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => scrollCategories('left')}
+                  disabled={categoriesLoading || categories.length === 0}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -156,6 +240,7 @@ export default function HomePage() {
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => scrollCategories('right')}
+                  disabled={categoriesLoading || categories.length === 0}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -163,27 +248,81 @@ export default function HomePage() {
             </div>
             
             <div className="relative">
-              <div 
-                ref={categoriesRef}
-                className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {categories.map((cat) => (
-                  <Link key={cat.name} href={`/shop?category=${cat.name.toLowerCase().replace(' ', '-')}`} className="block flex-shrink-0">
-                    <Card className="w-32 hover:shadow-md transition-all border-none shadow-sm">
-                      <CardContent className="p-3 text-center flex flex-col items-center">
-                        <div className={`w-12 h-12 rounded-full ${cat.color} flex items-center justify-center text-xl mb-2`}>
-                          {cat.icon}
-                        </div>
-                        <p className="text-sm font-medium line-clamp-1">{cat.name}</p>
+              {categoriesLoading ? (
+                <div className="flex gap-3 overflow-x-hidden pb-4">
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <Card key={index} className="w-32 border-none shadow-sm animate-pulse">
+                      <CardContent className="p-3 text-center">
+                        <div className="w-12 h-12 rounded-full bg-muted mx-auto mb-2" />
+                        <div className="h-4 bg-muted rounded w-20 mx-auto" />
                       </CardContent>
                     </Card>
-                  </Link>
-                ))}
-              </div>
-              
-              {/* Gradient overlay for scroll indication */}
-              <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+                  ))}
+                </div>
+              ) : categoriesError ? (
+                <div className="text-center py-6">
+                  <p className="text-destructive text-sm">{categoriesError}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : categories.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-muted-foreground text-sm">No categories available</p>
+                </div>
+              ) : (
+                <>
+                  <div 
+                    ref={categoriesRef}
+                    className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  >
+                    {categories.map((cat, index) => (
+                      <Link 
+                        key={cat.id} 
+                        href={`/shop?category=${cat.id}`} 
+                        className="block flex-shrink-0"
+                      >
+                        <Card className="w-32 hover:shadow-md transition-all border-none shadow-sm">
+                          <CardContent className="p-3 text-center flex flex-col items-center">
+                            {cat.image ? (
+                              <div className="w-12 h-12 rounded-full overflow-hidden mb-2">
+                                <img
+                                  src={cat.image}
+                                  alt={cat.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <div 
+                                className={`w-12 h-12 rounded-full flex items-center justify-center text-xl mb-2 ${
+                                  categoryColors[index % categoryColors.length]
+                                }`}
+                              >
+                                {categoryIcons[index % categoryIcons.length]}
+                              </div>
+                            )}
+                            <p className="text-sm font-medium line-clamp-1">{cat.name}</p>
+                            {cat.productCount > 0 && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {cat.productCount} product{cat.productCount !== 1 ? 's' : ''}
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
+                  </div>
+                  
+                  {/* Gradient overlay for scroll indication */}
+                  <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+                </>
+              )}
             </div>
           </div>
         </section>
