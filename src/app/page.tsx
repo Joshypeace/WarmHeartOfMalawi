@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight } from "lucide-react"
+import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight, TrendingUp, Flame } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +46,9 @@ interface ApiProduct {
   material?: string | null
   createdAt: string
   updatedAt: string
+  orderCount?: number
+  popularityBadge?: string
+  dealMetric?: string
 }
 
 // Union type for featured products
@@ -55,6 +58,10 @@ export default function HomePage() {
   const heroProducts = mockProducts.slice(0, 5)
   const [currentSlide, setCurrentSlide] = useState(0)
   const topDeals = mockProducts.slice(0, 8)
+
+  const [deals, setDeals] = useState<DisplayProduct[]>([])
+  const [dealsLoading, setDealsLoading] = useState(true)
+  const [dealsError, setDealsError] = useState<string | null>(null)
   
   // Featured products state
   const [featuredProducts, setFeaturedProducts] = useState<DisplayProduct[]>([])
@@ -166,6 +173,42 @@ export default function HomePage() {
     fetchFeaturedProducts()
   }, [])
 
+  // Fetch Today's Deals (top selling products)
+  useEffect(() => {
+    const fetchDeals = async () => {
+      try {
+        setDealsLoading(true)
+        setDealsError(null)
+        
+        // Fetch top selling products
+        const response = await fetch('/api/shop/top-selling?limit=8')
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch deals: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        
+        if (result.success) {
+          setDeals(result.data.products)
+        } else {
+          throw new Error(result.error || 'Failed to load deals')
+        }
+      } catch (err) {
+        console.error('Error fetching deals:', err)
+        setDealsError(err instanceof Error ? err.message : 'Failed to load deals')
+        // Fallback to mock deals if API fails
+        setDeals(mockProducts.slice(0, 8))
+      } finally {
+        setDealsLoading(false)
+      }
+    }
+
+    fetchDeals()
+  }, [])
+
+
+
   // Fallback categories if API fails
   const getFallbackCategories = (): Category[] => {
     const fallbackCategories = [
@@ -222,6 +265,35 @@ export default function HomePage() {
       return product.stock > 0
     }
   }
+  
+   const getOrderCount = (product: DisplayProduct): number => {
+    if ('orderCount' in product && product.orderCount !== undefined) {
+      return product.orderCount
+    }
+    return 0
+  }
+
+  // Helper function to get deal metric
+  const getDealMetric = (product: DisplayProduct): string => {
+    if ('dealMetric' in product && product.dealMetric) {
+      return product.dealMetric
+    }
+    return "Hot deal"
+  }
+
+  // Helper function to get popularity badge
+  const getPopularityBadge = (product: DisplayProduct): string => {
+    if ('popularityBadge' in product && product.popularityBadge) {
+      return product.popularityBadge
+    }
+    const orderCount = getOrderCount(product)
+    if (orderCount >= 50) return "🔥 Bestseller"
+    if (orderCount >= 20) return "⭐ Popular"
+    if (orderCount >= 10) return "🆕 Trending"
+    if (orderCount > 0) return "📈 New Seller"
+    return "🆕 New"
+  }
+
 
   // Scroll functions
   const scrollCategories = (direction: 'left' | 'right') => {
@@ -439,11 +511,14 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Deals - Horizontally Scrollable */}
+       {/* Today's Deals - Horizontally Scrollable */}
         <section className="py-6 bg-muted/20">
           <div className="container mx-auto px-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Today's Deals</h2>
+              <div className="flex items-center gap-2">
+                <Flame className="h-5 w-5 text-orange-500" />
+                <h2 className="text-lg font-semibold">Today's Deals</h2>
+              </div>
               <div className="flex items-center gap-4">
                 <Link href="/shop" className="text-sm text-primary hover:underline">
                   View all
@@ -454,6 +529,7 @@ export default function HomePage() {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => scrollDeals('left')}
+                    disabled={dealsLoading || deals.length === 0}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -462,6 +538,7 @@ export default function HomePage() {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => scrollDeals('right')}
+                    disabled={dealsLoading || deals.length === 0}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -470,52 +547,107 @@ export default function HomePage() {
             </div>
 
             <div className="relative">
-              <div 
-                ref={dealsRef}
-                className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {topDeals.map((p, index) => {
-                  // Use index to get consistent discount or use a fixed percentage
-                  const discount = discounts[index] || 20 // Fallback to 20% if discounts not loaded yet
-                  
-                  return (
-                    <Link key={p.id} href={`/shop/${p.id}`} className="block flex-shrink-0">
-                      <Card className="w-64 h-full hover:shadow-md transition">
-                        <div className="h-40 bg-muted overflow-hidden rounded-t-lg">
-                          <img
-                            src={p.image}
-                            alt={p.name}
-                            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                          />
-                        </div>
+              {dealsLoading ? (
+                <div className="flex gap-4 overflow-x-hidden pb-4">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="w-64 flex-shrink-0">
+                      <Card className="h-full hover:shadow-md transition animate-pulse">
+                        <div className="h-40 bg-muted rounded-t-lg" />
                         <CardContent className="p-4">
-                          <p className="text-sm font-medium line-clamp-2 mb-2">{p.name}</p>
-                          <p className="text-primary font-bold text-base mb-2">
-                            MWK {p.price.toLocaleString()}
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1 text-xs">
-                              <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                              <span className="font-medium">{p.rating}</span>
-                              <span className="text-muted-foreground">({p.reviews})</span>
-                            </div>
-                            <Badge variant="destructive" className="text-xs">
-                              -{discount}%
-                            </Badge>
-                          </div>
+                          <div className="h-5 bg-muted rounded mb-2" />
+                          <div className="h-6 bg-muted rounded mb-2" />
+                          <div className="h-4 bg-muted rounded" />
                         </CardContent>
                       </Card>
-                    </Link>
-                  )
-                })}
-              </div>
-              
-              {/* Gradient overlay for scroll indication */}
-              <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-muted/20 to-transparent pointer-events-none" />
+                    </div>
+                  ))}
+                </div>
+              ) : dealsError ? (
+                <div className="text-center py-6">
+                  <p className="text-destructive text-sm">{dealsError}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : deals.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-muted-foreground">No deals available today</p>
+                </div>
+              ) : (
+                <>
+                  <div 
+                    ref={dealsRef}
+                    className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  >
+                    {deals.map((p) => {
+                      const orderCount = getOrderCount(p)
+                      const dealMetric = getDealMetric(p)
+                      const popularityBadge = getPopularityBadge(p)
+                      
+                      return (
+                        <Link key={p.id} href={`/shop/${p.id}`} className="block flex-shrink-0">
+                          <Card className="w-64 h-full hover:shadow-md transition border border-orange-200">
+                            <div className="h-40 bg-muted overflow-hidden rounded-t-lg relative">
+                              <img
+                                src={getProductImage(p)}
+                                alt={p.name}
+                                className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                              />
+                              {/* Popularity Badge */}
+                              {popularityBadge && (
+                                <div className="absolute top-2 left-2">
+                                  <Badge className="bg-orange-600 text-white border-none">
+                                    {popularityBadge}
+                                  </Badge>
+                                </div>
+                              )}
+                              {/* Deal Metric */}
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                                <div className="flex items-center gap-1 text-white text-xs">
+                                  <TrendingUp className="h-3 w-3" />
+                                  <span className="font-medium">{dealMetric}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <CardContent className="p-4">
+                              <p className="text-sm font-medium line-clamp-2 mb-2">{p.name}</p>
+                              <p className="text-primary font-bold text-base mb-2">
+                                MWK {p.price.toLocaleString()}
+                              </p>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1 text-xs">
+                                  <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                                  <span className="font-medium">{getProductRating(p)}</span>
+                                  <span className="text-muted-foreground">({getProductReviews(p)})</span>
+                                </div>
+                                {orderCount > 0 && (
+                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <ShoppingBag className="h-3 w-3" />
+                                    <span>{orderCount}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* Gradient overlay for scroll indication */}
+                  <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-muted/20 to-transparent pointer-events-none" />
+                </>
+              )}
             </div>
           </div>
         </section>
+
 
         {/* Featured Products - Horizontally Scrollable */}
         <section className="py-8 bg-background">
