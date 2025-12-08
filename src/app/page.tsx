@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { ShoppingBag, Star, Package, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { mockProducts } from "@/lib/mock-data"
+import { mockProducts, type Product as MockProduct } from "@/lib/mock-data"
 
 // Pre-generate consistent discount percentages to avoid hydration errors
 const generateConsistentDiscounts = () => {
-  // Use a seed or fixed values to ensure consistency
   const fixedDiscounts = [15, 20, 25, 30, 35, 40, 45, 50]
   return fixedDiscounts
 }
@@ -25,11 +24,42 @@ interface Category {
   productCount: number
 }
 
+// Define API Product interface based on your Prisma schema
+interface ApiProduct {
+  id: string
+  name: string
+  description: string
+  price: number
+  images: string[]
+  category: string
+  categoryId: string | null
+  inStock: boolean
+  stockCount: number
+  vendorId: string
+  vendorName: string
+  rating: number
+  reviews: number
+  featured: boolean
+  brand?: string | null
+  size?: string | null
+  color?: string | null
+  material?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// Union type for featured products
+type DisplayProduct = ApiProduct | MockProduct
+
 export default function HomePage() {
   const heroProducts = mockProducts.slice(0, 5)
   const [currentSlide, setCurrentSlide] = useState(0)
-  const featuredProducts = mockProducts.filter((p) => p.featured).slice(0, 6)
   const topDeals = mockProducts.slice(0, 8)
+  
+  // Featured products state
+  const [featuredProducts, setFeaturedProducts] = useState<DisplayProduct[]>([])
+  const [featuredLoading, setFeaturedLoading] = useState(true)
+  const [featuredError, setFeaturedError] = useState<string | null>(null)
   
   // Use consistent discounts to avoid hydration errors
   const [discounts, setDiscounts] = useState<number[]>([])
@@ -84,6 +114,58 @@ export default function HomePage() {
     fetchCategories()
   }, [])
 
+  // Fetch featured products from API
+  useEffect(() => {
+    const fetchFeaturedProducts = async () => {
+      try {
+        setFeaturedLoading(true)
+        setFeaturedError(null)
+        
+        // Fetch featured products with sort=featured and limit=6
+        const response = await fetch('/api/shop/products?featured=true&limit=6')
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch featured products: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        
+        if (result.success) {
+          setFeaturedProducts(result.data.products)
+        } else {
+          throw new Error(result.error || 'Failed to load featured products')
+        }
+      } catch (err) {
+        console.error('Error fetching featured products:', err)
+        setFeaturedError(err instanceof Error ? err.message : 'Failed to load featured products')
+        // Fallback to mock featured products if API fails
+        const fallbackProducts = mockProducts
+          .filter((p) => p.featured)
+          .slice(0, 6)
+          .map(p => ({
+            ...p,
+            // Ensure fallback products have required ApiProduct properties
+            images: [p.image],
+            categoryId: null,
+            inStock: p.stock > 0,
+            stockCount: p.stock,
+            featured: p.featured || false,
+            brand: undefined,
+            size: undefined,
+            color: undefined,
+            material: undefined,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }))
+        setFeaturedProducts(fallbackProducts)
+      } finally {
+        setFeaturedLoading(false)
+      }
+    }
+
+    fetchFeaturedProducts()
+  }, [])
+
   // Fallback categories if API fails
   const getFallbackCategories = (): Category[] => {
     const fallbackCategories = [
@@ -105,10 +187,40 @@ export default function HomePage() {
       description: null,
       image: null,
       isActive: true,
-      productCount: 10, // Default product count for fallback
+      productCount: 10,
       icon: cat.icon,
       color: cat.color
     }))
+  }
+
+  // Helper function to get product image
+  const getProductImage = (product: DisplayProduct): string => {
+    if ('images' in product) {
+      // API Product
+      return product.images[0] || "/placeholder.svg"
+    } else {
+      // Mock Product
+      return product.image
+    }
+  }
+
+  // Helper function to get product rating
+  const getProductRating = (product: DisplayProduct): number => {
+    return product.rating || 0
+  }
+
+  // Helper function to get product reviews count
+  const getProductReviews = (product: DisplayProduct): number => {
+    return product.reviews || 0
+  }
+
+  // Helper function to check if product is in stock
+  const isProductInStock = (product: DisplayProduct): boolean => {
+    if ('inStock' in product) {
+      return product.inStock
+    } else {
+      return product.stock > 0
+    }
   }
 
   // Scroll functions
@@ -420,6 +532,7 @@ export default function HomePage() {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => scrollFeatured('left')}
+                    disabled={featuredLoading || featuredProducts.length === 0}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -428,6 +541,7 @@ export default function HomePage() {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => scrollFeatured('right')}
+                    disabled={featuredLoading || featuredProducts.length === 0}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -436,55 +550,99 @@ export default function HomePage() {
             </div>
 
             <div className="relative">
-              <div 
-                ref={featuredRef}
-                className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {featuredProducts.map((p) => (
-                  <Link key={p.id} href={`/shop/${p.id}`} className="block flex-shrink-0">
-                    <Card className="w-72 h-full hover:shadow-lg transition border shadow-sm">
-                      <div className="h-48 bg-muted overflow-hidden relative rounded-t-lg">
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                        />
-                        <div className="absolute top-2 left-2">
-                          <Badge className="bg-white text-black hover:bg-white">
-                            Featured
-                          </Badge>
-                        </div>
-                      </div>
-
+              {featuredLoading ? (
+                <div className="flex gap-4 overflow-x-hidden pb-4">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <Card key={index} className="w-72 h-full border shadow-sm animate-pulse">
+                      <div className="h-48 bg-muted rounded-t-lg" />
                       <CardContent className="p-5">
-                        <p className="text-base font-semibold mb-2 line-clamp-2">{p.name}</p>
-                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                          {p.description}
-                        </p>
-
+                        <div className="h-6 bg-muted rounded mb-2" />
+                        <div className="h-4 bg-muted rounded mb-3" />
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-primary font-bold text-lg">MWK {p.price.toLocaleString()}</p>
-                            <div className="flex items-center gap-1 text-sm">
-                              <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                              <span className="font-medium">{p.rating}</span>
-                              <span className="text-muted-foreground">({p.reviews})</span>
-                            </div>
+                            <div className="h-7 bg-muted rounded w-24 mb-2" />
+                            <div className="h-4 bg-muted rounded w-32" />
                           </div>
-                          <Button size="sm" className="gap-2">
-                            <ShoppingBag className="h-4 w-4" />
-                            Add to Cart
-                          </Button>
+                          <div className="h-9 bg-muted rounded w-28" />
                         </div>
                       </CardContent>
                     </Card>
-                  </Link>
-                ))}
-              </div>
-              
-              {/* Gradient overlay for scroll indication */}
-              <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+                  ))}
+                </div>
+              ) : featuredError ? (
+                <div className="text-center py-8">
+                  <p className="text-destructive text-sm mb-2">{featuredError}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : featuredProducts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No featured products available</p>
+                </div>
+              ) : (
+                <>
+                  <div 
+                    ref={featuredRef}
+                    className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  >
+                    {featuredProducts.map((p) => (
+                      <Link key={p.id} href={`/shop/${p.id}`} className="block flex-shrink-0">
+                        <Card className="w-72 h-full hover:shadow-lg transition border shadow-sm">
+                          <div className="h-48 bg-muted overflow-hidden relative rounded-t-lg">
+                            <img
+                              src={getProductImage(p)}
+                              alt={p.name}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute top-2 left-2">
+                              <Badge className="bg-white text-black hover:bg-white">
+                                Featured
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <CardContent className="p-5">
+                            <p className="text-base font-semibold mb-2 line-clamp-2">{p.name}</p>
+                            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                              {p.description}
+                            </p>
+
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-primary font-bold text-lg">
+                                  MWK {p.price.toLocaleString()}
+                                </p>
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                                  <span className="font-medium">{getProductRating(p)}</span>
+                                  <span className="text-muted-foreground">({getProductReviews(p)})</span>
+                                </div>
+                              </div>
+                              <Button 
+                                size="sm" 
+                                className="gap-2"
+                                disabled={!isProductInStock(p)}
+                              >
+                                <ShoppingBag className="h-4 w-4" />
+                                {isProductInStock(p) ? "Add to Cart" : "Out of Stock"}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
+                  </div>
+                  
+                  {/* Gradient overlay for scroll indication */}
+                  <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+                </>
+              )}
             </div>
           </div>
         </section>

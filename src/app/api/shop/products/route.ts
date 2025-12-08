@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const category = searchParams.get('category') || ''
     const sort = searchParams.get('sort') || 'featured'
+    const featured = searchParams.get('featured') // New featured filter
     const sizes = searchParams.get('sizes')?.split(',').filter(Boolean) || []
     const colors = searchParams.get('colors')?.split(',').filter(Boolean) || []
     const materials = searchParams.get('materials')?.split(',').filter(Boolean) || []
@@ -26,6 +27,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Featured filter - NEW: Filter by featured status
+    if (featured === 'true') {
+      where.featured = true
+    }
+
     // Search filter
     if (search) {
       where.OR = [
@@ -34,7 +40,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Category filter - FIXED: Always use categoryId when category is provided
+    // Category filter
     if (category && category !== 'all') {
       where.categoryId = category
     }
@@ -82,7 +88,10 @@ export async function GET(request: NextRequest) {
         break
       case 'featured':
       default:
-        orderBy = [{ featured: 'desc' }, { createdAt: 'desc' }]
+        // If filtering by featured, we don't need to sort by featured since all are featured
+        orderBy = featured === 'true' 
+          ? { createdAt: 'desc' } 
+          : [{ featured: 'desc' }, { createdAt: 'desc' }]
         break
     }
 
