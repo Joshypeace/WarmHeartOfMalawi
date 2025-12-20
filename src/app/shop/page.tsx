@@ -1,18 +1,33 @@
+// Update your useCategories hook or the component to handle hierarchy
+// For now, let me update the main shop page to handle the new structure:
+
 "use client"
 
-import { useState } from "react"
-import { Search, SlidersHorizontal, Star, Package, X, Tag, Palette, Ruler, Package2, Shield, Truck } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Search, SlidersHorizontal, Star, Package, X, Tag, Palette, Ruler, Package2, Shield, Truck, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import Link from "next/link"
 import Image from "next/image"
 import { useCart } from "@/lib/cart-context"
 import { useToast } from "@/hooks/use-toast"
 import { useShopProducts } from "@/hooks/use-shop-products"
-import { useCategories } from "@/hooks/use-categories"
+
+interface Category {
+  id: string
+  name: string
+  count: number
+  type: 'MAIN' | 'SUB'
+  subCategories?: Array<{
+    id: string
+    name: string
+    count: number
+  }>
+}
 
 interface ProductDetails {
   id: string
@@ -21,6 +36,7 @@ interface ProductDetails {
   price: number
   images: string[]
   category: string
+  categoryId?: string
   inStock: boolean
   stockCount: number
   featured: boolean
@@ -28,7 +44,6 @@ interface ProductDetails {
   reviews: number | null
   vendorName: string
   createdAt: string
-  // New optional fields
   brand?: string | null
   size?: string | null
   color?: string | null
@@ -38,22 +53,68 @@ interface ProductDetails {
 export default function ShopPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState("featured")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   
   const { products, loading, error } = useShopProducts({
     search: searchQuery,
     category: selectedCategory === "all" ? "" : selectedCategory,
+    subCategory: selectedSubCategory || "",
     sort: sortBy
   })
-
-  const { categories, loading: categoriesLoading } = useCategories()
 
   const { addItem } = useCart()
   const { toast } = useToast()
 
-  const activeCategories = categories.filter(cat => cat.isActive && cat.productCount > 0)
+  // Fetch categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true)
+        const response = await fetch('/api/shop/categories')
+        const result = await response.json()
+        
+        if (result.success) {
+          setCategories(result.data)
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+      } finally {
+        setCategoriesLoading(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
+
+  const toggleCategoryExpansion = (categoryId: string) => {
+    const newExpanded = new Set(expandedCategories)
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId)
+    } else {
+      newExpanded.add(categoryId)
+    }
+    setExpandedCategories(newExpanded)
+  }
+
+  const handleCategorySelect = (categoryId: string, isSubCategory: boolean = false) => {
+    if (isSubCategory) {
+      setSelectedSubCategory(categoryId)
+      // Find the parent category
+      const parentCategory = categories.find(cat => 
+        cat.subCategories?.some(sub => sub.id === categoryId)
+      )
+      setSelectedCategory(parentCategory?.id || "all")
+    } else {
+      setSelectedCategory(categoryId)
+      setSelectedSubCategory(null)
+    }
+  }
 
   const handleAddToCart = (product: ProductDetails) => {
     addItem(String(product.id))
@@ -66,9 +127,10 @@ export default function ShopPage() {
   const clearFilters = () => {
     setSearchQuery("")
     setSelectedCategory("all")
+    setSelectedSubCategory(null)
   }
 
-  const hasActiveFilters = searchQuery || selectedCategory !== "all"
+  const hasActiveFilters = searchQuery || selectedCategory !== "all" || selectedSubCategory !== null
 
   const formatRating = (rating: number | null) => {
     return rating ? rating.toFixed(1) : "0.0"
@@ -112,6 +174,23 @@ export default function ShopPage() {
   const parseDetails = (detailString: string | null | undefined) => {
     if (!detailString) return []
     return detailString.split(',').map(item => item.trim()).filter(item => item)
+  }
+
+  // Get selected category/subcategory name for display
+  const getSelectedCategoryName = () => {
+    if (selectedSubCategory) {
+      const subCategory = categories
+        .flatMap(cat => cat.subCategories || [])
+        .find(sub => sub.id === selectedSubCategory)
+      return subCategory?.name
+    }
+    
+    if (selectedCategory !== "all") {
+      const category = categories.find(cat => cat.id === selectedCategory)
+      return category?.name
+    }
+    
+    return null
   }
 
   return (
@@ -174,39 +253,89 @@ export default function ShopPage() {
 
               {/* Categories */}
               <div>
-                <h3 className="font-semibold mb-3 text-sm">Categories</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-sm">Categories</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {categories.reduce((sum, cat) => sum + cat.count, 0)} total
+                  </span>
+                </div>
                 <div className="space-y-1">
                   <Button
-                    variant={selectedCategory === "all" ? "secondary" : "ghost"}
+                    variant={selectedCategory === "all" && !selectedSubCategory ? "secondary" : "ghost"}
                     className="w-full justify-start text-sm h-9"
-                    onClick={() => setSelectedCategory("all")}
+                    onClick={() => {
+                      setSelectedCategory("all")
+                      setSelectedSubCategory(null)
+                    }}
                   >
                     All Categories
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {categories.reduce((sum, cat) => sum + cat.productCount, 0)}
-                    </span>
                   </Button>
+                  
                   {categoriesLoading ? (
                     <div className="flex items-center justify-center py-4">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                     </div>
-                  ) : activeCategories.length === 0 ? (
+                  ) : categories.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-2 px-3">
                       No categories available
                     </p>
                   ) : (
-                    activeCategories.map((category) => (
-                      <Button
-                        key={category.id}
-                        variant={selectedCategory === category.id ? "secondary" : "ghost"}
-                        className="w-full justify-start text-sm h-9"
-                        onClick={() => setSelectedCategory(category.id)}
-                      >
-                        <span className="flex-1 text-left">{category.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {category.productCount}
-                        </span>
-                      </Button>
+                    categories.map((category) => (
+                      <div key={category.id} className="space-y-1">
+                        <Collapsible
+                          open={expandedCategories.has(category.id)}
+                          onOpenChange={() => toggleCategoryExpansion(category.id)}
+                        >
+                          <div className="flex items-center">
+                            <Button
+                              variant={selectedCategory === category.id && !selectedSubCategory ? "secondary" : "ghost"}
+                              className="w-full justify-start text-sm h-9 rounded-r-none flex-1"
+                              onClick={() => handleCategorySelect(category.id)}
+                            >
+                              <span className="flex-1 text-left">{category.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {category.count}
+                              </span>
+                            </Button>
+                            
+                            {category.subCategories && category.subCategories.length > 0 && (
+                              <CollapsibleTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-9 w-9 p-0 rounded-l-none"
+                                >
+                                  {expandedCategories.has(category.id) ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </CollapsibleTrigger>
+                            )}
+                          </div>
+                          
+                          {category.subCategories && category.subCategories.length > 0 && (
+                            <CollapsibleContent>
+                              <div className="ml-4 space-y-1 border-l pl-2">
+                                {category.subCategories.map((subCategory) => (
+                                  <Button
+                                    key={subCategory.id}
+                                    variant={selectedSubCategory === subCategory.id ? "secondary" : "ghost"}
+                                    className="w-full justify-start text-xs h-8"
+                                    onClick={() => handleCategorySelect(subCategory.id, true)}
+                                  >
+                                    <span className="flex-1 text-left">{subCategory.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {subCategory.count}
+                                    </span>
+                                  </Button>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
+                          )}
+                        </Collapsible>
+                      </div>
                     ))
                   )}
                 </div>
@@ -266,10 +395,13 @@ export default function ShopPage() {
                 )}
                 {selectedCategory !== "all" && (
                   <Badge variant="secondary" className="flex items-center gap-1">
-                    Category: {activeCategories.find(cat => cat.id === selectedCategory)?.name}
+                    Category: {getSelectedCategoryName()}
                     <X 
                       className="h-3 w-3 cursor-pointer" 
-                      onClick={() => setSelectedCategory("all")}
+                      onClick={() => {
+                        setSelectedCategory("all")
+                        setSelectedSubCategory(null)
+                      }}
                     />
                   </Badge>
                 )}
@@ -286,8 +418,8 @@ export default function ShopPage() {
                 ) : (
                   <>
                     {products.length} {products.length === 1 ? "product" : "products"} found
-                    {selectedCategory !== "all" && (
-                      <> in "{activeCategories.find(cat => cat.id === selectedCategory)?.name}"</>
+                    {getSelectedCategoryName() && (
+                      <> in "{getSelectedCategoryName()}"</>
                     )}
                   </>
                 )}

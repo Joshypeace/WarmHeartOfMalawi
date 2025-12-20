@@ -7,6 +7,7 @@ interface Product {
   price: number
   images: string[]
   category: string
+  categoryId?: string
   inStock: boolean
   stockCount: number
   featured: boolean
@@ -25,6 +26,7 @@ interface Product {
 interface UseShopProductsProps {
   search?: string
   category?: string
+  subCategory?: string
   sort?: string
   sizes?: string[]
   colors?: string[]
@@ -58,7 +60,8 @@ const fetcher = async (url: string): Promise<ApiResponse> => {
 
 export function useShopProducts({ 
   search = '', 
-  category = '', 
+  category = '',
+  subCategory = '', 
   sort = 'featured',
   sizes = [],
   colors = [],
@@ -69,6 +72,7 @@ export function useShopProducts({
   const params = new URLSearchParams()
   if (search) params.append('search', search)
   if (category) params.append('category', category)
+  if (subCategory) params.append('subCategory', subCategory)
   if (sort) params.append('sort', sort)
   if (sizes.length > 0) params.append('sizes', sizes.join(','))
   if (colors.length > 0) params.append('colors', colors.join(','))

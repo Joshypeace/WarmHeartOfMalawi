@@ -28,6 +28,18 @@ interface Product {
   }
   createdAt: string
   updatedAt: string
+  // Add category hierarchy fields
+  categoryData?: {
+    id: string
+    name: string
+    type: 'MAIN' | 'SUB'
+    level: number
+    parentId: string | null
+    parent?: {
+      id: string
+      name: string
+    }
+  }
 }
 
 interface RelatedProduct {
@@ -79,25 +91,16 @@ export function useProductDetail(productId: string) {
         const data: ApiResponse = await response.json()
 
         if (data.success && data.data) {
-          // ✅ Handle backward compatibility
+          // Normalize product data
           const normalizedProduct = {
             ...data.data.product,
-            // If stockCount is undefined but stock exists, use stock
-            stockCount: data.data.product.stockCount ?? data.data.product.inStock ?? 0,
-            // Remove old stock property to avoid confusion
-            ...(data.data.product.inStock && { stock: undefined })
+            stockCount: data.data.product.stockCount ?? 0,
           }
           
           const normalizedRelated = data.data.relatedProducts.map(rp => ({
             ...rp,
-            stockCount: rp.stockCount ?? rp.inStock ?? 0,
-            ...(rp.inStock && { stock: undefined })
+            stockCount: rp.stockCount ?? 0,
           }))
-          
-          console.log('🔍 API Response Check:', {
-            original: data.data.product,
-            normalized: normalizedProduct
-          })
           
           setProduct(normalizedProduct)
           setRelatedProducts(normalizedRelated)
