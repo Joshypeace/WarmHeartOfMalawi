@@ -21,6 +21,132 @@ const UpdateProductSchema = z.object({
   featured: z.boolean().optional(),
 })
 
+// DELETE method for deleting a product
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: "Unauthorized - Please log in" },
+        { status: 401 }
+      )
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { 
+        email: session.user.email,
+        role: "VENDOR" 
+      }
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Vendor account not found" },
+        { status: 403 }
+      )
+    }
+
+    // Check if product exists and belongs to the vendor
+    const product = await prisma.product.findFirst({
+      where: {
+        id,
+        vendorId: user.id,
+      }
+    })
+
+    if (!product) {
+      return NextResponse.json(
+        { error: "Product not found or you do not have permission to delete it" },
+        { status: 404 }
+      )
+    }
+
+    // Check for active orders (not delivered/completed)
+    const activeOrderItem = await prisma.orderItem.findFirst({
+      where: {
+        productId: id,
+        order: {
+          status: {
+            in: ['PENDING', 'PROCESSING', 'SHIPPED', 'CONFIRMED']
+          }
+        }
+      }
+    })
+
+    if (activeOrderItem) {
+      return NextResponse.json(
+        { 
+          error: "Cannot delete product with active orders",
+          suggestion: "Wait for orders to be delivered or canceled before deleting"
+        },
+        { status: 400 }
+      )
+    }
+
+    // Use a transaction to delete related records first
+    const result = await prisma.$transaction(async (tx) => {
+    
+    
+      await tx.orderItem.deleteMany({
+        where: { productId: id }
+      });
+
+   
+      const deletedProduct = await tx.product.delete({
+        where: { id }
+      });
+
+      return deletedProduct;
+    });
+
+    return NextResponse.json({ 
+      success: true,
+      message: "Product deleted successfully" 
+    });
+
+  } catch (error: unknown) {
+    console.error('Delete product error:', error);
+    
+    let errorMessage = 'Failed to delete product';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      // Handle Prisma errors
+      if (error.name === 'PrismaClientKnownRequestError') {
+        const prismaError = error as any;
+        
+        switch (prismaError.code) {
+          case 'P2003':
+            errorMessage = 'Cannot delete product due to database constraints';
+            break;
+          case 'P2025':
+            errorMessage = 'Product not found';
+            statusCode = 404;
+            break;
+          default:
+            errorMessage = `Database error: ${prismaError.code}`;
+        }
+      }
+      
+      errorMessage = error.message;
+    }
+    
+    return NextResponse.json(
+      { 
+        success: false,
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      },
+      { status: statusCode }
+    );
+  }
+}
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -190,7 +316,6 @@ export async function PUT(
   }
 }
 
-// Keep existing GET and DELETE methods
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

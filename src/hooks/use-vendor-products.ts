@@ -48,24 +48,24 @@ export function useVendorProducts(searchQuery: string = '') {
   }, [fetchProducts]);
 
   const deleteProduct = async (productId: string) => {
-    try {
-      const response = await fetch(`/api/vendor/products/${productId}`, {
-        method: 'DELETE',
-      });
+  try {
+    const response = await fetch(`/api/vendor/products/${productId}`, {
+      method: 'DELETE',
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete product');
-      }
-
-      // Remove the deleted product from local state
-      setProducts(prev => prev.filter(product => product.id !== productId));
-      
-      return { success: true };
-    } catch (err) {
-      throw new Error(err instanceof Error ? err.message : 'Failed to delete product');
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to delete product');
     }
-  };
+
+    // Remove the deleted product from local state
+    setProducts(prev => prev.filter(product => product.id !== productId));
+    
+    return { success: true };
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : 'Failed to delete product');
+  }
+};
 
   return {
     products,
