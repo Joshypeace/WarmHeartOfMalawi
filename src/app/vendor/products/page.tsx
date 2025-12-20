@@ -64,25 +64,28 @@ function VendorProductsContent() {
 }
 
   const handleDelete = async (productId: string, productName: string) => {
-    setDeletingProduct(productId)
-    
-    try {
-      await deleteProduct(productId)
-      toast({
-        title: "Product deleted",
-        description: `${productName} has been removed from your listings.`,
-      })
-    } catch (err: any) {
-      toast({
-        title: "Delete failed",
-        description: err.message || "Failed to delete product. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setDeletingProduct(null)
-    }
+  if (!confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
+    return;
   }
 
+  setDeletingProduct(productId);
+  
+  try {
+    await deleteProduct(productId);
+    toast({
+      title: "Product deleted",
+      description: `${productName} has been removed from your listings.`,
+    });
+  } catch (err: any) {
+    toast({
+      title: "Delete failed",
+      description: err.message || "Failed to delete product. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setDeletingProduct(null);
+  }
+}
   const getStockStatus = (stockCount: number) => {
     if (stockCount > 10) return { variant: "default" as const, text: `${stockCount} units` }
     if (stockCount > 0) return { variant: "secondary" as const, text: `${stockCount} units` }

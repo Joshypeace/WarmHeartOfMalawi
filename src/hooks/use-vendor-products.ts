@@ -1,61 +1,53 @@
-import { useState, useEffect } from 'react';
+// hooks/use-vendor-products.ts (or wherever your hook is located)
+import { useState, useEffect, useCallback } from 'react';
 
-interface Product {
+interface ProductResponse {
   id: string;
   name: string;
   description: string;
   price: number;
   category: string;
+  categoryId: string | null;
   images: string[];
   stockCount: number;
-  categoryId: string | null;
   inStock: boolean;
   createdAt: string;
   updatedAt: string;
   vendorId: string;
-  brand: string | null;
-  size: string | null;
-  color: string | null;
-  material: string | null;
-  featured: boolean;
-  rating: number;
-  reviews: number;
 }
 
 export function useVendorProducts(searchQuery: string = '') {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchProducts() {
-      try {
-        setLoading(true);
-        
-        const params = new URLSearchParams();
-        if (searchQuery) {
-          params.append('search', searchQuery);
-        }
-
-        const response = await fetch(`/api/vendor/products?${params.toString()}`);
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch products');
-        }
-        
-        const data = await response.json();
-        setProducts(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch products');
-      } finally {
-        setLoading(false);
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const queryString = searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : '';
+      const response = await fetch(`/api/vendor/products${queryString}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
       }
+      
+      const data = await response.json();
+      setProducts(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      setProducts([]);
+    } finally {
+      setLoading(false);
     }
-
-    fetchProducts();
   }, [searchQuery]);
 
-  const deleteProduct = async (productId: string): Promise<boolean> => {
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const deleteProduct = async (productId: string) => {
     try {
       const response = await fetch(`/api/vendor/products/${productId}`, {
         method: 'DELETE',
@@ -66,13 +58,20 @@ export function useVendorProducts(searchQuery: string = '') {
         throw new Error(errorData.error || 'Failed to delete product');
       }
 
-      setProducts(prevProducts => prevProducts.filter(product => product.id !== productId));
-      return true;
+      // Remove the deleted product from local state
+      setProducts(prev => prev.filter(product => product.id !== productId));
+      
+      return { success: true };
     } catch (err) {
-      console.error('Error deleting product:', err);
-      throw err;
+      throw new Error(err instanceof Error ? err.message : 'Failed to delete product');
     }
   };
 
-  return { products, loading, error, deleteProduct };
+  return {
+    products,
+    loading,
+    error,
+    refetch: fetchProducts,
+    deleteProduct,
+  };
 }
