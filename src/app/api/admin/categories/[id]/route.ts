@@ -9,10 +9,14 @@ const UpdateCategorySchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional().nullable(),
   image: z.string().optional().nullable(),
-  isActive: z.boolean().optional()
+  slug: z.string().optional(),
+  isActive: z.boolean().optional(),
+  type: z.enum(['MAIN', 'SUB']).optional(),
+  parentId: z.string().optional().nullable(),
+  level: z.number().min(1).max(2).optional()
 })
 
-// GET - Get single category (Now accessible to all authenticated users)
+// GET - Get single category with hierarchy
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -35,9 +39,25 @@ export async function GET(
     const category = await prisma.category.findUnique({
       where: whereClause,
       include: {
+        parent: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        children: {
+          include: {
+            _count: {
+              select: {
+                products: true
+              }
+            }
+          }
+        },
         _count: {
           select: {
-            products: true
+            products: true,
+            children: true
           }
         }
       }
@@ -58,10 +78,28 @@ export async function GET(
           name: category.name,
           description: category.description,
           image: category.image,
+          slug: category.slug,
           isActive: category.isActive,
+          type: category.type,
+          level: category.level,
+          parentId: category.parentId,
+          parent: category.parent,
+          children: category.children.map(child => ({
+            id: child.id,
+            name: child.name,
+            description: child.description,
+            image: child.image,
+            slug: child.slug,
+            isActive: child.isActive,
+            type: child.type,
+            level: child.level,
+            parentId: child.parentId,
+            productCount: child._count.products
+          })),
+          productCount: category._count.products,
+          childrenCount: category._count.children,
           createdAt: category.createdAt,
-          updatedAt: category.updatedAt,
-          productCount: category._count.products
+          updatedAt: category.updatedAt
         }
       }
     })
@@ -75,7 +113,7 @@ export async function GET(
   }
 }
 
-// PUT, PATCH, DELETE - Keep these admin-only
+// PUT - Update category (admin only)
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -100,11 +138,19 @@ export async function PUT(
       )
     }
 
-    const { name, ...updateData } = validationResult.data
+    const validatedData = validationResult.data
 
     // Check if category exists
     const existingCategory = await prisma.category.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            products: true,
+            children: true
+          }
+        }
+      }
     })
 
     if (!existingCategory) {
@@ -114,15 +160,84 @@ export async function PUT(
       )
     }
 
+    // Check if changing type from SUB to MAIN when there are children
+    if (validatedData.type === 'MAIN' && existingCategory.type === 'SUB' && existingCategory._count.children > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot change subcategory to main category when it has children' },
+        { status: 400 }
+      )
+    }
+
+    // Handle type changes
+    let updateData = { ...validatedData }
+    
+    if (validatedData.type) {
+      if (validatedData.type === 'MAIN') {
+        updateData.parentId = null
+        updateData.level = 1
+      } else if (validatedData.type === 'SUB') {
+        // Validate parent if changing to subcategory
+        if (!validatedData.parentId && !existingCategory.parentId) {
+          return NextResponse.json(
+            { success: false, error: 'Parent category is required for subcategories' },
+            { status: 400 }
+          )
+        }
+        
+        const parentId = validatedData.parentId || existingCategory.parentId
+        if (parentId) {
+          const parentCategory = await prisma.category.findUnique({
+            where: { id: parentId }
+          })
+          
+          if (!parentCategory || parentCategory.type !== 'MAIN') {
+            return NextResponse.json(
+              { success: false, error: 'Invalid parent category' },
+              { status: 400 }
+            )
+          }
+          
+          if (parentId === id) {
+            return NextResponse.json(
+              { success: false, error: 'Category cannot be its own parent' },
+              { status: 400 }
+            )
+          }
+          
+          updateData.parentId = parentId
+        }
+        updateData.level = 2
+      }
+    }
+
     // Check if name is being changed and if it conflicts
-    if (name && name !== existingCategory.name) {
+    if (validatedData.name && validatedData.name !== existingCategory.name) {
       const nameConflict = await prisma.category.findUnique({
-        where: { name }
+        where: { name: validatedData.name }
       })
 
-      if (nameConflict) {
+      if (nameConflict && nameConflict.id !== id) {
         return NextResponse.json(
           { success: false, error: 'Category with this name already exists' },
+          { status: 400 }
+        )
+      }
+      
+      // Generate new slug if name changed
+      if (!validatedData.slug) {
+        updateData.slug = validatedData.name.toLowerCase().replace(/\s+/g, '-')
+      }
+    }
+
+    // Check if slug is being changed and if it conflicts
+    if (validatedData.slug && validatedData.slug !== existingCategory.slug) {
+      const slugConflict = await prisma.category.findUnique({
+        where: { slug: validatedData.slug }
+      })
+
+      if (slugConflict && slugConflict.id !== id) {
+        return NextResponse.json(
+          { success: false, error: 'Category with this slug already exists' },
           { status: 400 }
         )
       }
@@ -130,10 +245,7 @@ export async function PUT(
 
     const updatedCategory = await prisma.category.update({
       where: { id },
-      data: {
-        ...updateData,
-        ...(name && { name })
-      }
+      data: updateData
     })
 
     return NextResponse.json({
@@ -145,7 +257,11 @@ export async function PUT(
           name: updatedCategory.name,
           description: updatedCategory.description,
           image: updatedCategory.image,
+          slug: updatedCategory.slug,
           isActive: updatedCategory.isActive,
+          type: updatedCategory.type,
+          level: updatedCategory.level,
+          parentId: updatedCategory.parentId,
           createdAt: updatedCategory.createdAt,
           updatedAt: updatedCategory.updatedAt
         }
@@ -202,6 +318,9 @@ export async function PATCH(
           description: updatedCategory.description,
           image: updatedCategory.image,
           isActive: updatedCategory.isActive,
+          type: updatedCategory.type,
+          level: updatedCategory.level,
+          parentId: updatedCategory.parentId,
           createdAt: updatedCategory.createdAt,
           updatedAt: updatedCategory.updatedAt
         }
@@ -236,7 +355,8 @@ export async function DELETE(
       include: {
         _count: {
           select: {
-            products: true
+            products: true,
+            children: true
           }
         }
       }
@@ -252,6 +372,13 @@ export async function DELETE(
     if (category._count.products > 0) {
       return NextResponse.json(
         { success: false, error: 'Cannot delete category with associated products' },
+        { status: 400 }
+      )
+    }
+
+    if (category._count.children > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete category with subcategories' },
         { status: 400 }
       )
     }

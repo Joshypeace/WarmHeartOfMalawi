@@ -1,8 +1,7 @@
-// app/admin/categories/page.tsx
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Plus, Edit, Trash2, Search, Filter, Folder, Upload, X, Image as ImageIcon } from "lucide-react"
+import { useState, useEffect, useRef, JSX} from "react"
+import { Plus, Edit, Trash2, Search, Filter, Folder, Upload, X, Image as ImageIcon, ChevronDown, ChevronRight, Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,16 +11,24 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import ProtectedRoute from "@/components/protected-route"
 import Image from "next/image"
+import React from "react"
 
 interface Category {
   id: string
   name: string
   description: string | null
   image: string | null
+  slug: string | null
   isActive: boolean
+  type: 'MAIN' | 'SUB'
+  level: number
+  parentId: string | null
+  parent: Category | null
+  children: Category[]
   productCount: number
   createdAt: string
   updatedAt: string
@@ -33,6 +40,7 @@ function CategoriesContent() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [showInactive, setShowInactive] = useState(false)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   
   // Form state
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -44,11 +52,14 @@ function CategoriesContent() {
     image: null as File | null,
     imagePreview: "",
     imageUrl: "", // For existing image
-    isActive: true
+    isActive: true,
+    type: "MAIN" as "MAIN" | "SUB",
+    parentId: "",
+    level: 1
   })
   const [submitting, setSubmitting] = useState(false)
 
-  // Fetch categories
+  // Fetch categories with hierarchy
   const fetchCategories = async () => {
     try {
       setLoading(true)
@@ -56,7 +67,27 @@ function CategoriesContent() {
       const result = await response.json()
       
       if (result.success) {
-        setCategories(result.data.categories)
+        // Build hierarchy from flat list
+        const categoryMap = new Map<string, Category>()
+        const rootCategories: Category[] = []
+        
+        // First pass: create map
+        result.data.categories.forEach((category: Category) => {
+          categoryMap.set(category.id, { ...category, children: [] })
+        })
+        
+        // Second pass: build tree
+        result.data.categories.forEach((category: Category) => {
+          const categoryNode = categoryMap.get(category.id)!
+          if (category.parentId && categoryMap.has(category.parentId)) {
+            const parent = categoryMap.get(category.parentId)!
+            parent.children.push(categoryNode)
+          } else {
+            rootCategories.push(categoryNode)
+          }
+        })
+        
+        setCategories(rootCategories)
       } else {
         throw new Error(result.error || 'Failed to fetch categories')
       }
@@ -76,17 +107,49 @@ function CategoriesContent() {
     fetchCategories()
   }, [])
 
+  // Get all main categories for subcategory dropdown
+  const mainCategories = categories.filter(cat => cat.type === 'MAIN')
+
+  // Toggle row expansion
+  const toggleRowExpansion = (categoryId: string) => {
+    const newExpanded = new Set(expandedRows)
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId)
+    } else {
+      newExpanded.add(categoryId)
+    }
+    setExpandedRows(newExpanded)
+  }
+
   // Filter categories based on search and active status
-  const filteredCategories = categories.filter(category => {
-    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         category.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesActive = showInactive ? true : category.isActive
-    return matchesSearch && matchesActive
-  })
+  const filterCategories = (cats: Category[]): Category[] => {
+    return cats.filter(category => {
+      const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          category.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          category.children.some(child => 
+                            child.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            child.description?.toLowerCase().includes(searchTerm.toLowerCase())
+                          )
+      const matchesActive = showInactive ? true : category.isActive
+      return matchesSearch && matchesActive
+    })
+  }
+
+  const filteredCategories = filterCategories(categories)
 
   // Handle form input changes
   const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    const newFormData = { ...formData, [field]: value }
+    
+    // Automatically set level based on type
+    if (field === 'type') {
+      newFormData.level = value === 'MAIN' ? 1 : 2
+      if (value === 'MAIN') {
+        newFormData.parentId = ''
+      }
+    }
+    
+    setFormData(newFormData)
   }
 
   // Handle image upload
@@ -94,7 +157,6 @@ function CategoriesContent() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml']
     if (!validTypes.includes(file.type)) {
       toast({
@@ -105,7 +167,6 @@ function CategoriesContent() {
       return
     }
 
-    // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       toast({
         title: "File too large",
@@ -119,7 +180,7 @@ function CategoriesContent() {
       ...prev,
       image: file,
       imagePreview: URL.createObjectURL(file),
-      imageUrl: "" // Clear existing URL when uploading new image
+      imageUrl: ""
     }))
   }
 
@@ -150,7 +211,10 @@ function CategoriesContent() {
       image: null,
       imagePreview: "",
       imageUrl: "",
-      isActive: true
+      isActive: true,
+      type: "MAIN",
+      parentId: "",
+      level: 1
     })
     setEditingCategory(null)
     if (fileInputRef.current) {
@@ -159,7 +223,7 @@ function CategoriesContent() {
   }
 
   // Open dialog for creating/editing
-  const openDialog = (category?: Category) => {
+  const openDialog = (category?: Category, parentCategory?: Category) => {
     if (category) {
       setEditingCategory(category)
       setFormData({
@@ -168,7 +232,24 @@ function CategoriesContent() {
         image: null,
         imagePreview: "",
         imageUrl: category.image || "",
-        isActive: category.isActive
+        isActive: category.isActive,
+        type: category.type,
+        parentId: category.parentId || "",
+        level: category.level
+      })
+    } else if (parentCategory) {
+      // Creating a subcategory
+      setEditingCategory(null)
+      setFormData({
+        name: "",
+        description: "",
+        image: null,
+        imagePreview: "",
+        imageUrl: "",
+        isActive: true,
+        type: "SUB",
+        parentId: parentCategory.id,
+        level: 2
       })
     } else {
       resetForm()
@@ -221,7 +302,8 @@ function CategoriesContent() {
         },
         body: JSON.stringify({
           ...formData,
-          image: imageUrl
+          image: imageUrl,
+          slug: formData.name.toLowerCase().replace(/\s+/g, '-')
         })
       })
 
@@ -234,7 +316,7 @@ function CategoriesContent() {
         })
         setIsDialogOpen(false)
         resetForm()
-        fetchCategories() // Refresh the list
+        fetchCategories()
       } else {
         throw new Error(result.error || 'Failed to save category')
       }
@@ -252,7 +334,7 @@ function CategoriesContent() {
 
   // Handle delete
   const handleDelete = async (categoryId: string) => {
-    if (!confirm("Are you sure you want to delete this category? Products in this category will lose their category association.")) {
+    if (!confirm("Are you sure you want to delete this category? This will also delete all subcategories and products will lose their category association.")) {
       return
     }
 
@@ -268,7 +350,7 @@ function CategoriesContent() {
           title: "Success",
           description: "Category deleted successfully",
         })
-        fetchCategories() // Refresh the list
+        fetchCategories()
       } else {
         throw new Error(result.error || 'Failed to delete category')
       }
@@ -300,7 +382,7 @@ function CategoriesContent() {
           title: "Success",
           description: `Category ${!currentStatus ? 'activated' : 'deactivated'} successfully`,
         })
-        fetchCategories() // Refresh the list
+        fetchCategories()
       } else {
         throw new Error(result.error || 'Failed to update category')
       }
@@ -314,6 +396,62 @@ function CategoriesContent() {
     }
   }
 
+  // Render category rows recursively
+  const renderCategoryRow = (
+  category: Category,
+  depth = 0
+): JSX.Element => {
+  const isExpanded = expandedRows.has(category.id)
+
+  return (
+    <React.Fragment key={category.id}>
+      <TableRow className={depth > 0 ? "bg-muted/20" : ""}>
+        <TableCell style={{ paddingLeft: `${depth * 32 + 16}px` }}>
+          <div className="flex items-center gap-2">
+            {category.children.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => toggleRowExpansion(category.id)}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            ) : (
+              <div className="w-6" />
+            )}
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-muted">
+              {category.image ? (
+                <Image
+                  src={category.image}
+                  alt={category.name}
+                  fill
+                  className="object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+          </div>
+        </TableCell>
+
+        {/* ...rest unchanged */}
+      </TableRow>
+
+      {isExpanded &&
+        category.children.map(child =>
+          renderCategoryRow(child, depth + 1)
+        )}
+    </React.Fragment>
+  )
+}
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 md:px-6 py-8">
@@ -322,7 +460,7 @@ function CategoriesContent() {
           <div>
             <h1 className="text-4xl font-bold mb-2">Product Categories</h1>
             <p className="text-muted-foreground">
-              Manage product categories with images for better organization
+              Manage hierarchical categories with 2-level system (Main → Subcategories)
             </p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -335,7 +473,7 @@ function CategoriesContent() {
                 Add Category
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
               <DialogHeader>
                 <DialogTitle>
                   {editingCategory ? 'Edit Category' : 'Create New Category'}
@@ -343,12 +481,14 @@ function CategoriesContent() {
                 <DialogDescription>
                   {editingCategory 
                     ? 'Update the category details below.'
-                    : 'Add a new product category with an image for visual recognition.'
+                    : formData.type === 'SUB'
+                    ? 'Add a new subcategory'
+                    : 'Add a new main category'
                   }
                 </DialogDescription>
               </DialogHeader>
               
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-4 pr-2">
                 {/* Category Image */}
                 <div className="space-y-2">
                   <Label>Category Image</Label>
@@ -401,11 +541,56 @@ function CategoriesContent() {
                       id="name"
                       value={formData.name}
                       onChange={(e) => handleInputChange('name', e.target.value)}
-                      placeholder="e.g., Electronics, Clothing, Food"
+                      placeholder={
+                        formData.type === 'MAIN' 
+                          ? "e.g., Clothing, Agricultural Commodities" 
+                          : "e.g., Men's Clothing, Crops & Produce"
+                      }
                       required
                       disabled={submitting}
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Category Type</Label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value: "MAIN" | "SUB") => handleInputChange('type', value)}
+                      disabled={submitting || !!editingCategory}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MAIN">Main Category (Level 1)</SelectItem>
+                        <SelectItem value="SUB">Subcategory (Level 2)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {formData.type === 'SUB' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="parentId">Parent Category *</Label>
+                      <Select
+                        value={formData.parentId}
+                        onValueChange={(value) => handleInputChange('parentId', value)}
+                        disabled={submitting || !!editingCategory}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select parent category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {mainCategories
+                            .filter(cat => cat.isActive)
+                            .map(category => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
@@ -436,7 +621,7 @@ function CategoriesContent() {
                   <Button 
                     type="submit" 
                     className="flex-1" 
-                    disabled={submitting || !formData.name}
+                    disabled={submitting || !formData.name || (formData.type === 'SUB' && !formData.parentId)}
                   >
                     {submitting ? "Saving..." : editingCategory ? "Update Category" : "Create Category"}
                   </Button>
@@ -489,7 +674,7 @@ function CategoriesContent() {
         <Card>
           <CardHeader>
             <CardTitle>
-              Categories ({filteredCategories.length})
+              Categories ({filteredCategories.reduce((acc, cat) => acc + 1 + cat.children.length, 0)})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -530,84 +715,41 @@ function CategoriesContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCategories.map((category) => (
-                      <TableRow key={category.id}>
-                        <TableCell>
-                          <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-muted">
-                            {category.image ? (
-                              <Image
-                                src={category.image}
-                                alt={category.name}
-                                fill
-                                className="object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-3">
-                            {category.name}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <p className="max-w-xs truncate" title={category.description || ""}>
-                            {category.description || "No description"}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {category.productCount} products
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={category.isActive ? "default" : "secondary"}>
-                            {category.isActive ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(category.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => toggleCategoryStatus(category.id, category.isActive)}
-                            >
-                              {category.isActive ? "Deactivate" : "Activate"}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openDialog(category)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDelete(category.id)}
-                              disabled={category.productCount > 0}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {category.productCount > 0 && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Cannot delete - has products
-                            </p>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredCategories.map((category) => renderCategoryRow(category))}
                   </TableBody>
                 </Table>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Quick reference for the 2-level system */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>2-Level Category System</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-semibold mb-2">Clothing Categories</h3>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  <li>• Men's Clothing → T-Shirts, Shirts, Jeans, etc.</li>
+                  <li>• Women's Clothing → Dresses, Tops, Skirts, etc.</li>
+                  <li>• Kids' Clothing → Boys, Girls, Baby Wear</li>
+                  <li>• Accessories → Hats, Belts, Scarves, etc.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">Agricultural Commodities</h3>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  <li>• Crops & Produce → Cereals, Fruits, Vegetables</li>
+                  <li>• Cash Crops → Tobacco, Tea, Coffee, etc.</li>
+                  <li>• Livestock Products → Meat, Dairy, Eggs</li>
+                  <li>• Farm Inputs → Seeds, Fertilizers, Pesticides</li>
+                  <li>• Agricultural Equipment → Tools, Machinery</li>
+                </ul>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
