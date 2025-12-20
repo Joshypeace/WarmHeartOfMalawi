@@ -24,6 +24,8 @@ interface ManagedCategory {
   description: string | null
   isActive: boolean
   productCount: number
+  parentId: string | null
+  type: 'MAIN' | 'SUB'
 }
 
 function AddProductContent() {
@@ -241,17 +243,23 @@ function AddProductContent() {
       }
 
       const selectedCategory = managedCategories.find(cat => cat.id === formData.category)
-      
-      if (!selectedCategory) {
-        throw new Error("Please select a valid category")
+      let parentCategory = null
+      if (selectedCategory) {
+         if (selectedCategory.type === 'SUB' && selectedCategory.parentId) {
+          parentCategory = managedCategories.find(cat => cat.id === selectedCategory.parentId)
+        }
       }
+       
+      const categoryName = parentCategory 
+    ? `${parentCategory.name} - ${selectedCategory?.name}`
+    : selectedCategory?.name
 
       const filteredSizes = sizes.filter(size => size.trim() !== "")
       const filteredColors = colors.filter(color => color.trim() !== "")
 
       const productData = {
         ...formData,
-        category: selectedCategory.name,
+        category:categoryName,
         categoryId: formData.category,
         images: imageUrls,
         size: filteredSizes.length > 0 ? filteredSizes.join(", ") : undefined,
@@ -295,6 +303,16 @@ function AddProductContent() {
       setIsSubmitting(false)
     }
   }
+
+  const getCategoryHierarchyName = (category: ManagedCategory, categories: ManagedCategory[]): string => {
+  if (category.type === 'SUB' && category.parentId) {
+    const parent = categories.find(c => c.id === category.parentId)
+    return parent ? `${parent.name} - ${category.name}` : category.name
+  }
+  return category.name
+}
+
+
 
   const isFormValid = formData.name && 
                      formData.description && 
@@ -382,8 +400,11 @@ function AddProductContent() {
                       managedCategories
                         .filter(category => category.isActive)
                         .map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
+                         <SelectItem key={category.id} value={category.id}>
+                           {getCategoryHierarchyName(category, managedCategories)}
+                           {category.type === 'SUB' && (
+                           <span className="text-xs text-muted-foreground ml-2">(Subcategory)</span>
+                               )}
                           </SelectItem>
                         ))
                     )}

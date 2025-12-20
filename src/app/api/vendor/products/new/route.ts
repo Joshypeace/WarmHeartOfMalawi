@@ -1,3 +1,4 @@
+// vendor/products/new/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
@@ -14,7 +15,7 @@ const CreateProductSchema = z.object({
     }
     return parsed
   }),
-  category: z.string().min(1, "Category is required"),
+  category: z.string().min(1, "Category name is required"),
   categoryId: z.string().min(1, "Category ID is required"),
   stock: z.string().transform(val => {
     const parsed = parseInt(val)
@@ -100,10 +101,19 @@ export async function POST(request: NextRequest) {
       featured 
     } = validationResult.data
 
+    // Validate category exists and is active (can be either MAIN or SUB category)
     const categoryExists = await prisma.category.findFirst({
       where: {
         id: categoryId,
         isActive: true
+      },
+      include: {
+        parent: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     })
 
@@ -112,6 +122,13 @@ export async function POST(request: NextRequest) {
         { error: "Invalid category selected. Please choose a valid category." },
         { status: 400 }
       )
+    }
+
+    // For SUB categories, get the parent category name for the legacy category field
+    let finalCategoryName = categoryExists.name
+    if (categoryExists.type === 'SUB' && categoryExists.parent) {
+      // Store both parent and child category names for clarity
+      finalCategoryName = `${categoryExists.parent.name} - ${categoryExists.name}`
     }
 
     const productCount = await prisma.product.count({
@@ -133,7 +150,7 @@ export async function POST(request: NextRequest) {
         name,
         description,
         price,
-        category,
+        category: finalCategoryName, // Store formatted category name
         categoryId,
         stockCount: stock,
         inStock: stock > 0,
@@ -161,9 +178,13 @@ export async function POST(request: NextRequest) {
           }
         },
         categoryRef: {
-          select: {
-            id: true,
-            name: true
+          include: {
+            parent: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         }
       }
@@ -180,6 +201,14 @@ export async function POST(request: NextRequest) {
           price: product.price,
           category: product.categoryRef?.name || product.category,
           categoryId: product.categoryId,
+          categoryData: product.categoryRef ? {
+            id: product.categoryRef.id,
+            name: product.categoryRef.name,
+            type: product.categoryRef.type,
+            level: product.categoryRef.level,
+            parentId: product.categoryRef.parentId,
+            parentName: product.categoryRef.parent?.name
+          } : undefined,
           stockCount: product.stockCount,
           inStock: product.inStock,
           images: product.images,

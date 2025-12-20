@@ -15,7 +15,15 @@ interface ProductResponse {
   description: string;
   price: number;
   category: string; // Legacy field - category name
-  categoryId: string | null; // New field - managed category ID
+  categoryId: string | null; // Managed category ID
+  categoryData?: { // New field - category hierarchy info
+    id: string;
+    name: string;
+    type: 'MAIN' | 'SUB';
+    level: number;
+    parentId: string | null;
+    parentName?: string;
+  };
   images: string[];
   stockCount: number;
   inStock: boolean;
@@ -38,6 +46,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
     const vendorId = session.user.id;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
+    const categoryId = searchParams.get('categoryId');
 
     // Build where clause
     let whereClause: any = {
@@ -53,15 +62,23 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
       ];
     }
 
-    // Get vendor's products with category relation
+    // Add category filter if provided
+    if (categoryId) {
+      whereClause.categoryId = categoryId;
+    }
+
+    // Get vendor's products with category relation and parent category
     const products = await prisma.product.findMany({
       where: whereClause,
       include: {
         categoryRef: {
-          select: {
-            id: true,
-            name: true,
-            isActive: true
+          include: {
+            parent: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         }
       },
@@ -76,8 +93,16 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
       name: product.name,
       description: product.description,
       price: product.price,
-      category: product.categoryRef?.name || product.category || "Uncategorized", // Use managed category name if available
-      categoryId: product.categoryId, // Include the managed category ID
+      category: product.categoryRef?.name || product.category || "Uncategorized",
+      categoryId: product.categoryId,
+      categoryData: product.categoryRef ? {
+        id: product.categoryRef.id,
+        name: product.categoryRef.name,
+        type: product.categoryRef.type,
+        level: product.categoryRef.level,
+        parentId: product.categoryRef.parentId,
+        parentName: product.categoryRef.parent?.name
+      } : undefined,
       images: product.images,
       stockCount: product.stockCount,
       inStock: product.inStock,

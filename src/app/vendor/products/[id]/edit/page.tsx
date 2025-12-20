@@ -40,6 +40,9 @@ interface ManagedCategory {
   description: string | null
   isActive: boolean
   productCount: number
+  parentId: string | null
+  type: 'MAIN' | 'SUB'
+
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -65,6 +68,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   // Properly unwrap the params Promise
   const resolvedParams = React.use(params)
   const { id } = resolvedParams
+
+  const getCategoryHierarchyName = (category: ManagedCategory, categories: ManagedCategory[]): string => {
+  if (category.type === 'SUB' && category.parentId) {
+    const parent = categories.find(c => c.id === category.parentId)
+    return parent ? `${parent.name} - ${category.name}` : category.name
+  }
+  return category.name
+}
 
   // Form state
   const [formData, setFormData] = useState({
@@ -355,11 +366,15 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
       // Find the category name from the ID for backward compatibility
       const selectedCategory = managedCategories.find(cat => cat.id === formData.category)
-      
-      if (!selectedCategory && formData.category) {
-        throw new Error("Please select a valid category")
+      let parentCategory = null
+      if (selectedCategory) {
+        if (selectedCategory.type === 'SUB' && selectedCategory.parentId) {
+        parentCategory = managedCategories.find(cat => cat.id === selectedCategory.parentId)
+  }
       }
-      
+       const categoryName = parentCategory 
+    ? `${parentCategory.name} - ${selectedCategory?.name}`
+    : selectedCategory?.name
       // Filter out empty sizes and colors
       const filteredSizes = sizes.filter(size => size.trim() !== "")
       const filteredColors = colors.filter(color => color.trim() !== "")
@@ -370,7 +385,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       
       const updateData = {
         ...formData,
-        category: selectedCategory?.name || formData.category,
+        category: categoryName || formData.category,
         categoryId: formData.category,
         images: allImageUrls,
         // Combine sizes/colors arrays into comma-separated strings
@@ -566,25 +581,31 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                         <SelectValue placeholder={categoriesLoading ? "Loading categories..." : "Select category"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categoriesLoading ? (
-                          <div className="flex items-center justify-center py-4">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                            <span className="ml-2 text-sm text-muted-foreground">Loading categories...</span>
-                          </div>
-                        ) : managedCategories.length === 0 ? (
-                          <div className="text-center py-4 text-sm text-muted-foreground">
-                            No categories available
-                          </div>
-                        ) : (
-                          managedCategories
-                            .filter(category => category.isActive)
-                            .map((category) => (
-                              <SelectItem key={category.id} value={category.id}>
-                                {category.name}
-                              </SelectItem>
-                            ))
-                        )}
-                      </SelectContent>
+              {categoriesLoading ? (
+             <div className="flex items-center justify-center py-4">
+             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+      <span className="ml-2 text-sm text-muted-foreground">Loading categories...</span>
+    </div>
+            ) : managedCategories.length === 0 ? (
+           <div className="text-center py-4 text-sm text-muted-foreground">
+      No categories available
+    </div>
+                 ) : (
+              managedCategories
+              .filter(category => category.isActive)
+              .map((category) => {
+        const hierarchyName = getCategoryHierarchyName(category, managedCategories)
+                 return (
+               <SelectItem key={category.id} value={category.id}>
+            {hierarchyName}
+            {category.type === 'SUB' && (
+              <span className="text-xs text-muted-foreground ml-2">(Subcategory)</span>
+            )}
+          </SelectItem>
+        )
+      })
+           )}
+          </SelectContent>
                     </Select>
                     {!categoriesLoading && managedCategories.filter(cat => cat.isActive).length === 0 && (
                       <p className="text-xs text-amber-600">
