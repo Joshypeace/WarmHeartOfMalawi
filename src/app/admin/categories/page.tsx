@@ -397,7 +397,8 @@ function CategoriesContent() {
   }
 
   // Render category rows recursively
-  const renderCategoryRow = (
+ // Complete the renderCategoryRow function
+const renderCategoryRow = (
   category: Category,
   depth = 0
 ): JSX.Element => {
@@ -440,14 +441,101 @@ function CategoriesContent() {
             </div>
           </div>
         </TableCell>
-
-        {/* ...rest unchanged */}
+        
+        {/* Category Name and Type Badge */}
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{category.name}</span>
+            <Badge variant="outline">
+              {category.type === 'MAIN' ? 'Main' : 'Sub'} (L{category.level})
+            </Badge>
+            {category.parent && (
+              <span className="text-sm text-muted-foreground">
+                ← {category.parent.name}
+              </span>
+            )}
+          </div>
+        </TableCell>
+        
+        {/* Description */}
+        <TableCell>
+          <p className="max-w-xs truncate" title={category.description || ""}>
+            {category.description || "No description"}
+          </p>
+        </TableCell>
+        
+        {/* Product Count */}
+        <TableCell>
+          <Badge variant="secondary">
+            {category.productCount} products
+          </Badge>
+          {category.children.length > 0 && (
+            <div className="text-xs text-muted-foreground mt-1">
+              {category.children.length} subcategories
+            </div>
+          )}
+        </TableCell>
+        
+        {/* Status */}
+        <TableCell>
+          <Badge variant={category.isActive ? "default" : "secondary"}>
+            {category.isActive ? "Active" : "Inactive"}
+          </Badge>
+        </TableCell>
+        
+        {/* Created Date */}
+        <TableCell>
+          {new Date(category.createdAt).toLocaleDateString()}
+        </TableCell>
+        
+        {/* Actions */}
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-2">
+            {category.type === 'MAIN' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openDialog(undefined, category)}
+              >
+                <Layers className="h-4 w-4 mr-1" />
+                Add Sub
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toggleCategoryStatus(category.id, category.isActive)}
+            >
+              {category.isActive ? "Deactivate" : "Activate"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openDialog(category)}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDelete(category.id)}
+              disabled={category.productCount > 0 || category.children.length > 0}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+          {(category.productCount > 0 || category.children.length > 0) && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {category.productCount > 0 && "Cannot delete - has products"}
+              {category.productCount > 0 && category.children.length > 0 && " & "}
+              {category.children.length > 0 && "has subcategories"}
+            </p>
+          )}
+        </TableCell>
       </TableRow>
-
-      {isExpanded &&
-        category.children.map(child =>
-          renderCategoryRow(child, depth + 1)
-        )}
+      
+      {/* Render children if expanded */}
+      {isExpanded && category.children.map(child => renderCategoryRow(child, depth + 1))}
     </React.Fragment>
   )
 }
