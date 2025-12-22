@@ -1,23 +1,28 @@
 "use client"
 
 import Link from "next/link"
-import { Package, ArrowRight, Sparkles, ChevronLeft, ChevronRight } from "lucide-react"
+import { Package, ArrowRight, Sparkles, ChevronLeft, ChevronRight, FolderTree, Grid } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect, useRef } from "react"
 
-interface ManagedCategory {
+interface Category {
   id: string
   name: string
   description: string | null
   image: string | null
   isActive: boolean
+  type: string
+  level: number
+  parentId: string | null
   productCount: number
+  childrenCount: number
+  children?: Category[]
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<ManagedCategory[]>([])
+  const [mainCategories, setMainCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -29,14 +34,20 @@ export default function CategoriesPage() {
         setLoading(true)
         setError(null)
         const response = await fetch('/api/admin/categories')
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
         const result = await response.json()
         
-        if (result.success) {
-          // Filter only active categories with products
-          const activeCategories = result.data.categories.filter(
-            (cat: ManagedCategory) => cat.isActive && cat.productCount > 0
+        if (result.success && result.data?.categories) {
+          // Filter only main categories (level 1) that are active
+          const mainCats = result.data.categories.filter((cat: any) => 
+            cat.level === 1 && cat.isActive && (cat.productCount > 0 || cat.childrenCount > 0)
           )
-          setCategories(activeCategories)
+          
+          setMainCategories(mainCats)
         } else {
           throw new Error(result.error || 'Failed to fetch categories')
         }
@@ -71,6 +82,13 @@ export default function CategoriesPage() {
     "from-secondary/80 to-primary/80",
     "from-accent/80 to-secondary/80",
   ]
+
+  const getTotalProductCount = (category: any): number => {
+    const childProductCount = category.children?.reduce((sum: number, child: any) => 
+      sum + (child.productCount || 0), 0) || 0
+    
+    return (category.productCount || 0) + childProductCount
+  }
 
   if (error) {
     return (
@@ -124,7 +142,7 @@ export default function CategoriesPage() {
           </div>
         )}
 
-        {!loading && categories.length > 0 && (
+        {!loading && mainCategories.length > 0 && (
           <>
             {/* Scroll buttons for desktop */}
             <div className="hidden md:flex items-center justify-center gap-4 mb-6">
@@ -138,7 +156,7 @@ export default function CategoriesPage() {
                 <ChevronLeft className="h-5 w-5" />
               </Button>
               <span className="text-sm text-muted-foreground">
-                Scroll horizontally to browse categories
+                {mainCategories.length} main categories available
               </span>
               <Button
                 variant="outline"
@@ -160,53 +178,70 @@ export default function CategoriesPage() {
                 msOverflowStyle: 'none',
               }}
             >
-              {categories.map((category, index) => (
-                <div 
-                  key={category.id} 
-                  className="flex-shrink-0 w-full sm:w-80 snap-start"
-                >
-                  <Link
-                    href={`/shop?category=${encodeURIComponent(category.id)}`}
-                    className="group block h-full"
+              {mainCategories.map((category, index) => {
+                const totalProducts = getTotalProductCount(category)
+                const hasSubcategories = category.childrenCount > 0
+                
+                return (
+                  <div 
+                    key={category.id} 
+                    className="flex-shrink-0 w-full sm:w-80 snap-start"
                   >
-                    <Card className="overflow-hidden border-2 hover:border-primary/50 transition-all h-full">
-                      <div className="relative aspect-[4/3] overflow-hidden">
-                        {category.image ? (
-                          <img
-                            src={category.image}
-                            alt={category.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                            <Package className="h-16 w-16 text-primary/40" />
+                    <Link
+                      href={`/categories/${category.id}`}  // Changed to category detail page
+                      className="group block h-full"
+                    >
+                      <Card className="overflow-hidden border-2 hover:border-primary/50 transition-all h-full">
+                        <div className="relative aspect-[4/3] overflow-hidden">
+                          {category.image ? (
+                            <img
+                              src={category.image}
+                              alt={category.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                              {hasSubcategories ? (
+                                <FolderTree className="h-16 w-16 text-primary/40" />
+                              ) : (
+                                <Package className="h-16 w-16 text-primary/40" />
+                              )}
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-6">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Badge
+                                className={`bg-gradient-to-r ${categoryColors[index % categoryColors.length]} border-none shadow-lg`}
+                              >
+                                {totalProducts} {totalProducts === 1 ? 'Product' : 'Products'}
+                              </Badge>
+                              {hasSubcategories && (
+                                <Badge variant="outline" className="text-xs bg-white/20 text-white border-white/30">
+                                  <Grid className="h-3 w-3 mr-1" />
+                                  {category.childrenCount} Subcategories
+                                </Badge>
+                              )}
+                            </div>
+                            <h3 className="text-2xl font-bold text-white mb-2">{category.name}</h3>
+                            <p className="text-sm text-white/80 mb-4 line-clamp-2">
+                              {category.description || `Explore our ${category.name.toLowerCase()} collection`}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="gap-2 bg-white/90 hover:bg-white text-foreground transition-all duration-200"
+                            >
+                              {hasSubcategories ? 'View Subcategories' : 'Browse Products'}
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
                           </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                        <div className="absolute bottom-0 left-0 right-0 p-6">
-                          <Badge
-                            className={`mb-3 bg-gradient-to-r ${categoryColors[index % categoryColors.length]} border-none shadow-lg`}
-                          >
-                            {category.productCount} Products
-                          </Badge>
-                          <h3 className="text-2xl font-bold text-white mb-2">{category.name}</h3>
-                          <p className="text-sm text-white/80 mb-4 line-clamp-2">
-                            {category.description || `Explore our ${category.name.toLowerCase()} collection`}
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="gap-2 bg-white/90 hover:bg-white text-foreground transition-all duration-200"
-                          >
-                            Browse {category.name}
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
                         </div>
-                      </div>
-                    </Card>
-                  </Link>
-                </div>
-              ))}
+                      </Card>
+                    </Link>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Mobile scroll hint */}
@@ -220,7 +255,7 @@ export default function CategoriesPage() {
           </>
         )}
 
-        {!loading && categories.length === 0 && (
+        {!loading && mainCategories.length === 0 && (
           <div className="text-center py-12">
             <Package className="h-24 w-24 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-2xl font-bold mb-2">No Categories Found</h3>
