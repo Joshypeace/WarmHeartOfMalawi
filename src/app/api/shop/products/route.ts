@@ -9,8 +9,9 @@ export async function GET(request: NextRequest) {
     const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '12')))
     const search = searchParams.get('search') || ''
     const category = searchParams.get('category') || ''
+    const subCategory = searchParams.get('subCategory') || '' // ADDED: subCategory filter
     const sort = searchParams.get('sort') || 'featured'
-    const featured = searchParams.get('featured') // New featured filter
+    const featured = searchParams.get('featured')
     const sizes = searchParams.get('sizes')?.split(',').filter(Boolean) || []
     const colors = searchParams.get('colors')?.split(',').filter(Boolean) || []
     const materials = searchParams.get('materials')?.split(',').filter(Boolean) || []
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Featured filter - NEW: Filter by featured status
+    // Featured filter
     if (featured === 'true') {
       where.featured = true
     }
@@ -40,9 +41,14 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Category filter
+    // Category filter - UPDATED: Handle both category and subcategory
     if (category && category !== 'all') {
       where.categoryId = category
+    }
+    
+    // Subcategory filter - NEW: Filter by subcategory ID
+    if (subCategory) {
+      where.categoryId = subCategory
     }
 
     // Size filter
@@ -80,15 +86,11 @@ export async function GET(request: NextRequest) {
       case 'rating':
         orderBy = { rating: 'desc' }
         break
-      case 'name-asc':
+      case 'name':
         orderBy = { name: 'asc' }
-        break
-      case 'name-desc':
-        orderBy = { name: 'desc' }
         break
       case 'featured':
       default:
-        // If filtering by featured, we don't need to sort by featured since all are featured
         orderBy = featured === 'true' 
           ? { createdAt: 'desc' } 
           : [{ featured: 'desc' }, { createdAt: 'desc' }]
