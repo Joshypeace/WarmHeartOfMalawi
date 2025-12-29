@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import Link from "next/link"
 import Image from "next/image"
 import { useCart } from "@/lib/cart-context"
@@ -54,6 +53,7 @@ interface ShopCategory {
   count: number
   type: 'MAIN' | 'SUB'
   level: number
+  hasSubCategories?: boolean
   subCategories?: Array<{
     id: string
     name: string
@@ -97,7 +97,7 @@ export default function ShopPage() {
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   
-  // Use your existing hook with the category/subcategory parameters
+  // Use your existing hook - IMPORTANT: Use the original logic
   const { products, loading, error } = useShopProducts({
     search: searchQuery,
     category: selectedCategory === "all" ? "" : selectedCategory,
@@ -122,42 +122,47 @@ export default function ShopPage() {
         const result = await response.json()
         
         if (result.success && result.data?.categories) {
-          // Transform API categories to shop categories format
+          const allCategories = result.data.categories as ApiCategory[]
+          
+          // Build hierarchy: only MAIN categories at top level
           const shopCategories: ShopCategory[] = []
           
-          result.data.categories.forEach((category: ApiCategory) => {
-            // Only include active categories
-            if (category.isActive) {
-              // Calculate total product count for main category
+          allCategories.forEach((category: ApiCategory) => {
+            // Only include active MAIN categories
+            if (category.isActive && category.type === 'MAIN') {
+              // Find all active subcategories for this main category
+              const subCategories = allCategories
+                .filter(child => 
+                  child.isActive && 
+                  child.type === 'SUB' && 
+                  child.parentId === category.id &&
+                  (child.productCount || 0) > 0
+                )
+                .map(child => ({
+                  id: child.id,
+                  name: child.name,
+                  count: child.productCount || 0,
+                  type: child.type as 'SUB',
+                  level: child.level
+                }))
+                .sort((a, b) => b.count - a.count)
+              
+              // Calculate total product count for this main category (including subcategories)
               let totalProductCount = category.productCount || 0
+              subCategories.forEach(subCat => {
+                totalProductCount += subCat.count
+              })
               
-              // Add product counts from subcategories
-              if (category.children && category.children.length > 0) {
-                category.children.forEach((child) => {
-                  if (child.isActive) {
-                    totalProductCount += child.productCount || 0
-                  }
-                })
-              }
-              
-              // Only add categories that have products or active subcategories
-              if (totalProductCount > 0 || category.childrenCount > 0) {
+              // Only add main categories that have products or active subcategories
+              if (totalProductCount > 0 || subCategories.length > 0) {
                 const shopCategory: ShopCategory = {
                   id: category.id,
                   name: category.name,
                   count: totalProductCount,
                   type: category.type,
                   level: category.level,
-                  subCategories: category.children
-                    .filter(child => child.isActive && (child.productCount || 0) > 0)
-                    .map(child => ({
-                      id: child.id,
-                      name: child.name,
-                      count: child.productCount || 0,
-                      type: child.type as 'SUB',
-                      level: child.level
-                    }))
-                    .sort((a, b) => b.count - a.count) // Sort by count descending
+                  hasSubCategories: subCategories.length > 0,
+                  subCategories: subCategories
                 }
                 
                 shopCategories.push(shopCategory)
@@ -186,11 +191,11 @@ export default function ShopPage() {
     fetchCategories()
   }, [toast])
 
-  // Handle category selection
+  // Handle category selection - SIMPLIFIED: Just set the category ID
   const handleCategorySelect = (categoryId: string, isSubCategory: boolean = false) => {
     if (isSubCategory) {
       setSelectedSubCategory(categoryId)
-      // Find parent category
+      // Find parent category to set as selectedCategory too
       const parentCategory = categories.find(cat => 
         cat.subCategories?.some(sub => sub.id === categoryId)
       )
@@ -239,6 +244,23 @@ export default function ShopPage() {
         .flatMap(cat => cat.subCategories || [])
         .find(sub => sub.id === selectedSubCategory)
       return subCategory?.name || ""
+    }
+    
+    if (selectedCategory !== "all") {
+      const category = categories.find(cat => cat.id === selectedCategory)
+      return category?.name || ""
+    }
+    
+    return ""
+  }
+
+  // Get selected main category name (for when subcategory is selected)
+  const getSelectedMainCategoryName = (): string => {
+    if (selectedSubCategory) {
+      const parentCategory = categories.find(cat => 
+        cat.subCategories?.some(sub => sub.id === selectedSubCategory)
+      )
+      return parentCategory?.name || ""
     }
     
     if (selectedCategory !== "all") {
@@ -307,12 +329,6 @@ export default function ShopPage() {
   // Calculate total products across all categories
   const getTotalProductsCount = (): number => {
     return categories.reduce((sum, cat) => sum + cat.count, 0)
-  }
-
-  // Get subcategory count for a specific category
-  const getSubcategoryCount = (categoryId: string): number => {
-    const category = categories.find(cat => cat.id === categoryId)
-    return category?.subCategories?.length || 0
   }
 
   return (
@@ -412,71 +428,77 @@ export default function ShopPage() {
                     </p>
                   ) : (
                     categories.map((category) => {
-                      const hasSubcategories = category.subCategories && category.subCategories.length > 0
+                      const hasSubcategories = category.hasSubCategories
+                      const isExpanded = expandedCategories.has(category.id)
                       
                       return (
                         <div key={category.id} className="space-y-1">
-                          <Collapsible
-                            open={expandedCategories.has(category.id)}
-                            onOpenChange={() => toggleCategoryExpansion(category.id)}
-                          >
-                            <div className="flex items-center">
-                              <Button
-                                variant={selectedCategory === category.id && !selectedSubCategory ? "secondary" : "ghost"}
-                                className="w-full justify-start text-sm h-9 rounded-r-none flex-1"
-                                onClick={() => handleCategorySelect(category.id)}
-                                disabled={category.count === 0}
+                          {/* Main Category */}
+                          <div className="flex items-center">
+                            <Button
+                              variant={selectedCategory === category.id && !selectedSubCategory ? "secondary" : "ghost"}
+                              className="w-full justify-start text-sm h-9 rounded-r-none flex-1"
+                              onClick={() => {
+                                handleCategorySelect(category.id)
+                                // Toggle expansion for main category if it has subcategories
+                                if (hasSubcategories && !isExpanded) {
+                                  toggleCategoryExpansion(category.id)
+                                }
+                              }}
+                              disabled={category.count === 0}
+                            >
+                              <span className="flex-1 text-left truncate">{category.name}</span>
+                              <Badge 
+                                variant={category.count > 0 ? "outline" : "secondary"} 
+                                className="ml-2 text-xs shrink-0"
                               >
-                                <span className="flex-1 text-left truncate">{category.name}</span>
-                                <Badge 
-                                  variant={category.count > 0 ? "outline" : "secondary"} 
-                                  className="ml-2 text-xs shrink-0"
-                                >
-                                  {category.count}
-                                </Badge>
-                              </Button>
-                              
-                              {hasSubcategories && (
-                                <CollapsibleTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-9 w-9 p-0 rounded-l-none shrink-0"
-                                  >
-                                    {expandedCategories.has(category.id) ? (
-                                      <ChevronDown className="h-4 w-4" />
-                                    ) : (
-                                      <ChevronRight className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </CollapsibleTrigger>
-                              )}
-                            </div>
+                                {category.count}
+                              </Badge>
+                            </Button>
                             
+                            {/* Chevron for expandable categories */}
                             {hasSubcategories && (
-                              <CollapsibleContent className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-                                <div className="ml-4 space-y-1 border-l pl-2 mt-1">
-                                  {category.subCategories?.map((subCategory) => (
-                                    <Button
-                                      key={subCategory.id}
-                                      variant={selectedSubCategory === subCategory.id ? "secondary" : "ghost"}
-                                      className="w-full justify-start text-xs h-8"
-                                      onClick={() => handleCategorySelect(subCategory.id, true)}
-                                      disabled={subCategory.count === 0}
-                                    >
-                                      <span className="flex-1 text-left truncate">{subCategory.name}</span>
-                                      <Badge 
-                                        variant={subCategory.count > 0 ? "outline" : "secondary"} 
-                                        className="ml-2 text-xs shrink-0"
-                                      >
-                                        {subCategory.count}
-                                      </Badge>
-                                    </Button>
-                                  ))}
-                                </div>
-                              </CollapsibleContent>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 w-9 p-0 rounded-l-none shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleCategoryExpansion(category.id)
+                                }}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                              </Button>
                             )}
-                          </Collapsible>
+                          </div>
+                          
+                          {/* Subcategories Dropdown */}
+                          {hasSubcategories && isExpanded && (
+                            <div className="ml-4 space-y-1 border-l pl-2 mt-1 animate-in fade-in duration-200">
+                              {/* List subcategories */}
+                              {category.subCategories?.map((subCategory) => (
+                                <Button
+                                  key={subCategory.id}
+                                  variant={selectedSubCategory === subCategory.id ? "secondary" : "ghost"}
+                                  className="w-full justify-start text-xs h-8"
+                                  onClick={() => handleCategorySelect(subCategory.id, true)}
+                                  disabled={subCategory.count === 0}
+                                >
+                                  <span className="flex-1 text-left truncate">{subCategory.name}</span>
+                                  <Badge 
+                                    variant={subCategory.count > 0 ? "outline" : "secondary"} 
+                                    className="ml-2 text-xs shrink-0"
+                                  >
+                                    {subCategory.count}
+                                  </Badge>
+                                </Button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )
                     })
@@ -550,7 +572,7 @@ export default function ShopPage() {
                     />
                   </Badge>
                 )}
-                {selectedCategory !== "all" && getSelectedCategoryName() && (
+                {selectedCategory !== "all" && !selectedSubCategory && (
                   <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1">
                     Category: {getSelectedCategoryName()}
                     <X 
@@ -562,14 +584,26 @@ export default function ShopPage() {
                     />
                   </Badge>
                 )}
-                {selectedSubCategory && getSelectedCategoryName() && (
-                  <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
-                    Subcategory: {getSelectedCategoryName()}
-                    <X 
-                      className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
-                      onClick={() => setSelectedSubCategory(null)}
-                    />
-                  </Badge>
+                {selectedSubCategory && (
+                  <>
+                    <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1">
+                      Category: {getSelectedMainCategoryName()}
+                      <X 
+                        className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                        onClick={() => {
+                          setSelectedCategory("all")
+                          setSelectedSubCategory(null)
+                        }}
+                      />
+                    </Badge>
+                    <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
+                      Subcategory: {getSelectedCategoryName()}
+                      <X 
+                        className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                        onClick={() => setSelectedSubCategory(null)}
+                      />
+                    </Badge>
+                  </>
                 )}
               </div>
             )}
@@ -578,7 +612,9 @@ export default function ShopPage() {
             <div className="mb-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">
-                  {getSelectedCategoryName() 
+                  {selectedSubCategory 
+                    ? `${getSelectedCategoryName()} (${getSelectedMainCategoryName()})`
+                    : selectedCategory !== "all"
                     ? `${getSelectedCategoryName()} Products`
                     : "All Products"}
                 </h2>
