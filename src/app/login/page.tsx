@@ -11,15 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { UserRole } from "@/lib/role-utils"
 import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<UserRole>("customer")
   const router = useRouter()
   const { toast } = useToast()
 
@@ -32,7 +29,6 @@ export default function LoginPage() {
       const result = await signIn("credentials", {
         email,
         password,
-        role: selectedRole,
         redirect: false,
       })
 
@@ -63,20 +59,11 @@ export default function LoginPage() {
         description: "You have successfully logged in.",
       })
 
-      // Redirect based on role
-      switch (selectedRole) {
-        case "vendor":
-          router.push("/vendor/dashboard")
-          break
-        case "admin":
-          router.push("/admin/dashboard")
-          break
-        case "regional_admin":
-          router.push("/regional-admin/dashboard")
-          break
-        default:
-          router.push("/shop")
-      }
+      // Redirect based on user role (will be determined by NextAuth session)
+      // The role will be available in the session, so we redirect to a default
+      // and let the middleware handle role-based routing
+      router.push("/")
+      router.refresh() // Refresh to update session
     } catch (error: any) {
       // Handle unexpected errors
       toast({
@@ -146,35 +133,6 @@ export default function LoginPage() {
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm">Login as</Label>
-                <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)} className="w-full">
-                  <TabsList className="grid w-full grid-cols-4 h-9 md:h-10">
-                    <TabsTrigger value="customer" className="text-xs md:text-sm">
-                      Customer
-                    </TabsTrigger>
-                    <TabsTrigger value="vendor" className="text-xs md:text-sm">
-                      Vendor
-                    </TabsTrigger>
-                    <TabsTrigger value="admin" className="text-xs md:text-sm">
-                      Admin
-                    </TabsTrigger>
-                    <TabsTrigger value="regional_admin" className="text-xs md:text-sm">
-                      Reg. Admin
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              {/* Vendor login notice */}
-              {selectedRole === "vendor" && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-xs text-blue-800 text-center">
-                    💡 Vendor accounts require admin approval before first login
-                  </p>
-                </div>
-              )}
 
               <Button type="submit" className="w-full h-10 md:h-11 text-sm md:text-base" disabled={isLoading}>
                 {isLoading ? (
