@@ -780,21 +780,43 @@ export default function HomePage() {
         </section>
 
         {/* CTA */}
-        <section className="py-10 bg-primary text-white text-center">
-          <div className="container mx-auto px-4">
-            <h3 className="text-2xl font-bold mb-3">Become a Vendor</h3>
-            <p className="text-sm mb-5 max-w-md mx-auto">
-              Sell to thousands of customers across Malawi. Join WaHeA marketplace today!
-            </p>
+        {/* CTA - Multiple Action Buttons */}
+<section className="py-10 bg-gradient-to-r from-primary to-primary/90 text-white text-center">
+  <div className="container mx-auto px-4">
+    <h3 className="text-2xl font-bold mb-2">Join WaHeA Today</h3>
+    <p className="text-sm mb-6 max-w-md mx-auto">
+      Choose how you want to experience the Warm Heart of Malawi marketplace
+    </p>
 
-            <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90">
-              <Link href="/register" className="gap-2">
-                <Package className="w-4 h-4" />
-                Start Selling
-              </Link>
-            </Button>
-          </div>
-        </section>
+    <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-lg mx-auto">
+      {/* Customer Registration */}
+      <Button 
+        asChild 
+        size="lg" 
+        className="bg-white text-primary hover:bg-white/90 flex-1 min-w-[180px]"
+      >
+        <Link href="/register/customer" className="gap-2">
+          <ShoppingBag className="w-4 h-4" />
+          Start Shopping
+        </Link>
+      </Button>
+      
+      {/* Vendor Registration */}
+      <Button 
+        asChild 
+        size="lg" 
+        variant="outline"
+        className="bg-transparent border-white text-white hover:bg-white/10 flex-1 min-w-[180px]"
+      >
+        <Link href="/register/vendor" className="gap-2">
+          <Package className="w-4 h-4" />
+          Start Selling
+        </Link>
+      </Button>
+    </div>
+  
+  </div>
+</section>
 
       </main>
     </div>
