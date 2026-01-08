@@ -30,7 +30,8 @@ model User {
   customerOrders Order[] @relation("CustomerOrders")  
   userOrders     Order[] @relation("UserOrders")
   cartItems     CartItem[]     
-  wishlists     Wishlist[] 
+  wishlists     Wishlist[]
+  reviews       Review[]
 
   @@map("users")
 }
@@ -108,7 +109,7 @@ model Product {
   vendorId    String
   shopId      String
   rating      Float       @default(0.0)
-  reviews     Int         @default(0)
+  reviewCount Int         @default(0)
   featured    Boolean     @default(false)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -124,6 +125,7 @@ model Product {
 
   cartItems    CartItem[]
   wishlists    Wishlist[]
+  reviews      Review[]
   @@map("products")
 }
 
@@ -220,6 +222,24 @@ model Wishlist {
 
   @@unique([customerId, productId])
   @@map("wishlists")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  customerId String
+  rating    Int
+  comment   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product  Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer User    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([customerId])
+  @@unique([productId, customerId]) // Ensure one review per customer per product
+  @@map("reviews")
 }
 
 enum UserRole {
