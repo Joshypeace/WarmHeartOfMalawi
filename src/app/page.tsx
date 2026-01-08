@@ -38,7 +38,7 @@ interface ApiProduct {
   vendorId: string
   vendorName: string
   rating: number
-  reviews: number
+  reviewCount: number
   featured: boolean
   brand?: string | null
   size?: string | null
@@ -254,7 +254,7 @@ export default function HomePage() {
 
   // Helper function to get product reviews count
   const getProductReviews = (product: DisplayProduct): number => {
-    return product.reviews || 0
+    return product.reviewCount || 0
   }
 
   // Helper function to check if product is in stock

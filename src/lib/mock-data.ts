@@ -8,7 +8,7 @@ export interface Product {
   vendorId: string
   vendorName: string
   rating: number
-  reviews: number
+  reviewCount: number
   stock: number
   featured?: boolean
 }
@@ -24,7 +24,7 @@ export const mockProducts: Product[] = [
     vendorId: "v1",
     vendorName: "Lilongwe Crafts",
     rating: 4.8,
-    reviews: 24,
+    reviewCount: 24,
     stock: 15,
     featured: true,
   },
@@ -38,7 +38,7 @@ export const mockProducts: Product[] = [
     vendorId: "v2",
     vendorName: "Mzuzu Coffee Co.",
     rating: 4.9,
-    reviews: 56,
+    reviewCount: 56,
     stock: 42,
     featured: true,
   },
@@ -52,7 +52,7 @@ export const mockProducts: Product[] = [
     vendorId: "v3",
     vendorName: "Blantyre Textiles",
     rating: 4.7,
-    reviews: 38,
+    reviewCount: 38,
     stock: 28,
     featured: true,
   },
@@ -66,7 +66,7 @@ export const mockProducts: Product[] = [
     vendorId: "v1",
     vendorName: "Lilongwe Crafts",
     rating: 4.9,
-    reviews: 19,
+    reviewCount: 19,
     stock: 8,
   },
   {
@@ -79,7 +79,7 @@ export const mockProducts: Product[] = [
     vendorId: "v4",
     vendorName: "Sweet Malawi",
     rating: 4.6,
-    reviews: 67,
+    reviewCount: 67,
     stock: 55,
   },
   {
@@ -92,7 +92,7 @@ export const mockProducts: Product[] = [
     vendorId: "v5",
     vendorName: "Jewels of Malawi",
     rating: 4.8,
-    reviews: 43,
+    reviewCount: 43,
     stock: 22,
   },
   {
@@ -105,7 +105,7 @@ export const mockProducts: Product[] = [
     vendorId: "v2",
     vendorName: "Mzuzu Coffee Co.",
     rating: 4.7,
-    reviews: 31,
+    reviewCount: 31,
     stock: 38,
   },
   {
@@ -118,7 +118,7 @@ export const mockProducts: Product[] = [
     vendorId: "v1",
     vendorName: "Lilongwe Crafts",
     rating: 4.5,
-    reviews: 28,
+    reviewCount: 28,
     stock: 18,
   },
 ]
