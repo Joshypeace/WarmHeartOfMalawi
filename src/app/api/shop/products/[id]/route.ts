@@ -11,6 +11,7 @@ export async function GET(
   const { id } = await context.params
 
   try {
+    // In your GET method, update the product query:
     const product = await prisma.product.findUnique({
       where: { id },
       include: {
@@ -45,10 +46,24 @@ export async function GET(
             id: true,
             name: true
           }
+        },
+        // Add reviews to the include
+        reviews: {
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5 // Limit to recent reviews
         }
       }
     })
 
+    // Check if product exists
     if (!product) {
       return NextResponse.json(
         { success: false, error: 'Product not found' },
@@ -82,6 +97,18 @@ export async function GET(
             id: true,
             name: true
           }
+        },
+        reviews: {
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5
         }
       }
     })

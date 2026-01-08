@@ -39,6 +39,18 @@ export async function GET(request: Request) {
             name: true
           }
         },
+        reviews: {
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5
+        },
         _count: {
           select: {
             orderItems: {

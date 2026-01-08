@@ -120,7 +120,19 @@ export async function GET(request: NextRequest) {
               id: true,
               name: true
             }
-          }
+          },
+        reviews: {
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5
+        }
         },
         orderBy,
         skip,

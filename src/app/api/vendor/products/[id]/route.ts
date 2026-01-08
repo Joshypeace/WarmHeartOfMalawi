@@ -79,7 +79,19 @@ export async function GET(
               }
             }
           }
-        }
+        },
+        reviews: {
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5
+        },
       }
     })
 

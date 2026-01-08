@@ -17,7 +17,7 @@ const CreateProductSchema = z.object({
   }),
   category: z.string().min(1, "Category name is required"),
   categoryId: z.string().min(1, "Category ID is required"),
-  stock: z.string().transform(val => {
+  stockCount: z.string().transform(val => {
     const parsed = parseInt(val)
     if (isNaN(parsed) || parsed < 0) {
       throw new Error("Stock must be a valid non-negative number")
@@ -67,6 +67,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if vendor shop is approved
+    if (!user.vendorShop.isApproved) {
+      return NextResponse.json(
+        { error: "Your shop is not yet approved. Please wait for admin approval." },
+        { status: 403 }
+      )
+    }
+
     let body
     try {
       body = await request.json()
@@ -92,7 +100,7 @@ export async function POST(request: NextRequest) {
       price, 
       category, 
       categoryId, 
-      stock, 
+      stockCount,
       images,
       brand,
       size,
@@ -145,15 +153,16 @@ export async function POST(request: NextRequest) {
 
     const validImages = Array.isArray(images) ? images.slice(0, 10) : []
 
+    // Create product WITHOUT reviews field (Prisma will handle defaults)
     const product = await prisma.product.create({
       data: {
         name,
         description,
         price,
-        category: finalCategoryName, // Store formatted category name
+        category: finalCategoryName,
         categoryId,
-        stockCount: stock,
-        inStock: stock > 0,
+        stockCount,
+        inStock: stockCount > 0,
         images: validImages,
         vendorId: user.id,
         shopId: user.vendorShop.id,
@@ -163,7 +172,7 @@ export async function POST(request: NextRequest) {
         material: material?.trim() || null,
         featured,
         rating: 0.0,
-        reviews: 0,
+        reviewCount: 0,
       },
       include: {
         vendor: {
@@ -177,14 +186,19 @@ export async function POST(request: NextRequest) {
             name: true
           }
         },
-        categoryRef: {
-          include: {
-            parent: {
-              select: {
-                id: true,
-                name: true
-              }
-            }
+        // FIX: Remove categoryRef or check if it exists in your schema
+        categoryRef: true // Only include if it exists in your Prisma schema
+      }
+    })
+
+    // Get the category separately if needed
+    const categoryWithParent = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        parent: {
+          select: {
+            id: true,
+            name: true
           }
         }
       }
@@ -199,15 +213,15 @@ export async function POST(request: NextRequest) {
           name: product.name,
           description: product.description,
           price: product.price,
-          category: product.categoryRef?.name || product.category,
+          category: product.category,
           categoryId: product.categoryId,
-          categoryData: product.categoryRef ? {
-            id: product.categoryRef.id,
-            name: product.categoryRef.name,
-            type: product.categoryRef.type,
-            level: product.categoryRef.level,
-            parentId: product.categoryRef.parentId,
-            parentName: product.categoryRef.parent?.name
+          categoryData: categoryWithParent ? {
+            id: categoryWithParent.id,
+            name: categoryWithParent.name,
+            type: categoryWithParent.type,
+            level: categoryWithParent.level,
+            parentId: categoryWithParent.parentId,
+            parentName: categoryWithParent.parent?.name
           } : undefined,
           stockCount: product.stockCount,
           inStock: product.inStock,
@@ -223,8 +237,23 @@ export async function POST(request: NextRequest) {
       }
     }, { status: 201 })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Product creation error:", error)
+
+    // Handle specific Prisma errors
+    if (error.code === 'P2002') {
+      return NextResponse.json(
+        { error: "A product with similar details already exists." },
+        { status: 400 }
+      )
+    }
+    
+    if (error.code === 'P2003') {
+      return NextResponse.json(
+        { error: "Invalid category or shop reference." },
+        { status: 400 }
+      )
+    }
 
     if (error instanceof Error) {
       if (error.message.includes("prisma") || error.message.includes("database")) {
