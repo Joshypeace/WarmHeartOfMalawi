@@ -4,15 +4,15 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { Star, Minus, Plus, ShoppingCart, Heart, Share2, ArrowLeft, Store, Tag, Ruler, Palette, Package2 } from "lucide-react"
+import { Star, Minus, Plus, ShoppingCart, Heart, MapPin, Share2, ArrowLeft, Store, Tag, Ruler, Palette, Package2, MessageSquare, ThumbsUp, User, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCart } from "@/lib/cart-context"
 import { useToast } from "@/hooks/use-toast"
 import { useProductDetail } from "@/hooks/use-product-detail"
+import { Textarea } from "@/components/ui/textarea"
 import React from "react"
 
 interface ManagedCategory {
@@ -21,6 +21,17 @@ interface ManagedCategory {
   description: string | null
   isActive: boolean
   productCount: number
+}
+
+interface Review {
+  id: string
+  rating: number
+  comment: string
+  createdAt: string
+  customer: {
+    firstName: string
+    lastName: string
+  }
 }
 
 // Wishlist Button Component
@@ -134,6 +145,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
   const [managedCategories, setManagedCategories] = useState<ManagedCategory[]>([])
+  const [userRating, setUserRating] = useState(0)
+  const [reviewText, setReviewText] = useState("")
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [loadingReviews, setLoadingReviews] = useState(true)
   const { addItem } = useCart()
   const { toast } = useToast()
   const router = useRouter()
@@ -162,6 +178,31 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     fetchManagedCategories()
   }, [])
 
+  // Fetch reviews for this product
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!id) return
+      
+      try {
+        setLoadingReviews(true)
+        const response = await fetch(`/api/products/${id}/reviews`)
+        const result = await response.json()
+        
+        if (result.success) {
+          setReviews(result.data.reviews || [])
+        }
+      } catch (error) {
+        console.error('Error fetching reviews:', error)
+      } finally {
+        setLoadingReviews(false)
+      }
+    }
+
+    if (product) {
+      fetchReviews()
+    }
+  }, [id, product])
+
   // Helper function to get category name
   const getCategoryName = (categoryId: string | null, categoryName: string) => {
     if (categoryId) {
@@ -180,12 +221,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     return reviews || 0
   }
 
-  const renderRatingStars = (rating: number | null) => {
+  const renderRatingStars = (rating: number | null, size: 'sm' | 'md' | 'lg' = 'md') => {
     const displayRating = rating || 0
+    const sizeClasses = {
+      sm: 'h-3 w-3',
+      md: 'h-4 w-4 md:h-5 md:w-5',
+      lg: 'h-5 w-5 md:h-6 md:w-6'
+    }
+    
     return (
       <div className="flex items-center gap-1">
-        <Star className={`h-4 w-4 md:h-5 md:w-5 ${displayRating > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
-        <span className="font-medium text-sm md:text-base">{getDisplayRating(rating)}</span>
+        <Star className={`${sizeClasses[size]} ${displayRating > 0 ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+        <span className={`font-medium ${size === 'lg' ? 'text-lg' : 'text-sm md:text-base'}`}>
+          {getDisplayRating(rating)}
+        </span>
       </div>
     )
   }
@@ -194,6 +243,75 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const parseDetails = (detailString: string | null) => {
     if (!detailString) return []
     return detailString.split(',').map(item => item.trim()).filter(item => item)
+  }
+
+  // Handle review submission
+  const handleSubmitReview = async () => {
+    if (!userRating) {
+      toast({
+        title: "Rating required",
+        description: "Please select a rating before submitting your review.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!reviewText.trim()) {
+      toast({
+        title: "Review required",
+        description: "Please write your review before submitting.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmittingReview(true)
+
+    try {
+      const response = await fetch(`/api/products/${id}/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rating: userRating,
+          comment: reviewText.trim(),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit review')
+      }
+
+      toast({
+        title: "Review submitted!",
+        description: "Thank you for your feedback.",
+      })
+
+      // Reset form
+      setUserRating(0)
+      setReviewText("")
+
+      // Refresh reviews
+      const reviewsResponse = await fetch(`/api/products/${id}/reviews`)
+      const reviewsResult = await reviewsResponse.json()
+      
+      if (reviewsResult.success) {
+        setReviews(reviewsResult.data.reviews || [])
+      }
+
+    } catch (error: any) {
+      console.error('Error submitting review:', error)
+      toast({
+        title: "Failed to submit review",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmittingReview(false)
+    }
   }
 
   if (loading) {
@@ -353,7 +471,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-          {/* Info */}
+          {/* Product Info */}
           <div className="flex flex-col">
             <div className="mb-4">
               <Badge variant="secondary" className="mb-2 text-xs md:text-sm">
@@ -361,7 +479,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </Badge>
               <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-balance">{product.name}</h1>
               <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
-                {renderRatingStars(product.rating)}
+                {renderRatingStars(product.rating, 'lg')}
                 <span className="text-muted-foreground text-xs md:text-sm">
                   ({getDisplayReviews(product.reviews)} {getDisplayReviews(product.reviews) === 1 ? 'review' : 'reviews'})
                 </span>
@@ -490,7 +608,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            <div className="flex gap-2 md:gap-3 mb-4 md:mb-6">
+            <div className="flex gap-2 md:gap-3 mb-6 md:mb-8">
               <Button
                 onClick={handleAddToCart}
                 className="flex-1 h-11 md:h-12 text-sm md:text-base"
@@ -517,78 +635,30 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </Button>
             </div>
 
-            <Tabs defaultValue="description" className="flex-1">
-              <TabsList className="w-full grid grid-cols-3">
-                <TabsTrigger value="description" className="text-xs md:text-sm">
-                  Description
-                </TabsTrigger>
-                <TabsTrigger value="specifications" className="text-xs md:text-sm">
-                  Specifications
-                </TabsTrigger>
-                <TabsTrigger value="vendor" className="text-xs md:text-sm">
-                  Vendor
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="description" className="mt-3 md:mt-4">
-                <p className="text-muted-foreground text-sm md:text-base text-pretty leading-relaxed">
+            {/* Product Description */}
+            <div className="mb-6 md:mb-8">
+              <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" />
+                Product Description
+              </h3>
+              <div className="p-4 border rounded-lg bg-muted/30">
+                <p className="text-muted-foreground text-sm md:text-base text-pretty leading-relaxed whitespace-pre-line">
                   {product.description}
                 </p>
-              </TabsContent>
-              <TabsContent value="specifications" className="mt-3 md:mt-4">
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Category</h4>
-                      <p className="text-sm">{displayCategory}</p>
-                    </div>
-                    {product.brand && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted-foreground mb-1">Brand</h4>
-                        <p className="text-sm">{product.brand}</p>
-                      </div>
-                    )}
-                    {product.material && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted-foreground mb-1">Material</h4>
-                        <p className="text-sm">{product.material}</p>
-                      </div>
-                    )}
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Stock Status</h4>
-                      <p className="text-sm">{isProductAvailable ? 'In Stock' : 'Out of Stock'}</p>
-                    </div>
-                  </div>
-                  {sizes.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Available Sizes</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {sizes.map((size, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {size}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {colors.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Available Colors</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {colors.map((color, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {color}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-              <TabsContent value="vendor" className="mt-3 md:mt-4">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
+              </div>
+            </div>
+
+            {/* Vendor Information */}
+            <div className="mb-6 md:mb-8">
+              <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 flex items-center gap-2">
+                <Store className="h-5 w-5 text-primary" />
+                Vendor Information
+              </h3>
+              <Card className="border bg-card">
+                <CardContent className="p-4 md:p-6">
+                  <div className="flex flex-col md:flex-row md:items-center gap-4">
                     {product.vendorShop?.logo && (
-                      <div className="relative w-12 h-12 rounded-full overflow-hidden">
+                      <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border">
                         <Image 
                           src={product.vendorShop.logo} 
                           alt={product.vendorName}
@@ -597,24 +667,158 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                         />
                       </div>
                     )}
-                    <div>
-                      <h4 className="font-semibold">{product.vendorName}</h4>
-                      {product.vendorShop?.district && (
-                        <p className="text-sm text-muted-foreground">{product.vendorShop.district}</p>
+                    <div className="flex-1">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+                        <div>
+                          <h4 className="text-lg md:text-xl font-semibold">{product.vendorName}</h4>
+                          {product.vendorShop?.district && (
+                            <p className="text-sm text-muted-foreground">
+                              <MapPin className="h-3 w-3 inline mr-1" />
+                              {product.vendorShop.district}
+                            </p>
+                          )}
+                        </div>
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/vendors/${product.vendorId}`}>
+                            View Shop
+                          </Link>
+                        </Button>
+                      </div>
+                      {product.vendorShop?.description && (
+                        <p className="text-sm text-muted-foreground">{product.vendorShop.description}</p>
                       )}
                     </div>
                   </div>
-                  {product.vendorShop?.description && (
-                    <p className="text-sm text-muted-foreground">{product.vendorShop.description}</p>
-                  )}
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/vendors/${product.vendorId}`}>
-                      View Vendor Profile
-                    </Link>
-                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+
+        {/* Reviews & Rating Section */}
+        <div className="max-w-6xl mx-auto mb-8 md:mb-12">
+          <div className="flex flex-col lg:flex-row gap-6 md:gap-8">
+            {/* Leave a Review */}
+            <div className="lg:w-1/2">
+              <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+                <ThumbsUp className="h-5 w-5 text-primary" />
+                Leave a Review
+              </h3>
+              <Card className="border bg-card">
+                <CardContent className="p-4 md:p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Your Rating</label>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setUserRating(star)}
+                            className="focus:outline-none"
+                          >
+                            <Star
+                              className={`h-8 w-8 ${
+                                star <= userRating
+                                  ? 'fill-yellow-500 text-yellow-500'
+                                  : 'text-muted-foreground'
+                              } hover:text-yellow-500 transition-colors`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Your Review</label>
+                      <Textarea
+                        placeholder="Share your experience with this product..."
+                        value={reviewText}
+                        onChange={(e) => setReviewText(e.target.value)}
+                        rows={4}
+                        className="resize-none"
+                      />
+                    </div>
+                    
+                    <Button
+                      onClick={handleSubmitReview}
+                      disabled={isSubmittingReview || !userRating || !reviewText.trim()}
+                      className="w-full"
+                    >
+                      {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Customer Reviews */}
+            <div className="lg:w-1/2">
+              <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" />
+                Customer Reviews ({reviews.length})
+              </h3>
+              
+              {loadingReviews ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="border animate-pulse">
+                      <CardContent className="p-4">
+                        <div className="h-4 bg-muted rounded w-1/4 mb-2" />
+                        <div className="h-3 bg-muted rounded w-1/2 mb-3" />
+                        <div className="h-4 bg-muted rounded mb-1" />
+                        <div className="h-4 bg-muted rounded w-3/4" />
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-              </TabsContent>
-            </Tabs>
+              ) : reviews.length === 0 ? (
+                <Card className="border">
+                  <CardContent className="p-6 text-center">
+                    <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No reviews yet. Be the first to review this product!</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <Card key={review.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">
+                                {review.customer.firstName} {review.customer.lastName}
+                              </p>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Calendar className="h-3 w-3" />
+                                {formatDate(review.createdAt)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-4 w-4 ${
+                                  star <= review.rating
+                                    ? 'fill-yellow-500 text-yellow-500'
+                                    : 'text-muted-foreground'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{review.comment}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
