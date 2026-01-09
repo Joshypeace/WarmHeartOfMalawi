@@ -481,7 +481,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
                 {renderRatingStars(product.rating, 'lg')}
                 <span className="text-muted-foreground text-xs md:text-sm">
-                  ({getDisplayReviews(product.reviews)} {getDisplayReviews(product.reviews) === 1 ? 'review' : 'reviews'})
+                  ({getDisplayReviews(product.reviewCount)} {getDisplayReviews(product.reviewCount) === 1 ? 'review' : 'reviews'})
                 </span>
               </div>
               <Link

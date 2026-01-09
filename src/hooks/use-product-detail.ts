@@ -12,7 +12,7 @@ interface Product {
   stockCount: number
   featured: boolean
   rating: number | null
-  reviews: number | null
+  reviewCount: number | null
   brand: string | null
   size: string | null
   color: string | null
@@ -52,7 +52,7 @@ interface RelatedProduct {
   inStock: boolean
   stockCount: number
   rating: number | null
-  reviews: number | null
+  reviewCount: number | null
   brand: string | null
   size: string | null
   color: string | null
