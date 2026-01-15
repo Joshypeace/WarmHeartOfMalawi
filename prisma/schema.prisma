@@ -204,10 +204,35 @@ model Category {
   //relationships
   parent      Category? @relation("CategoryChildren", fields: [parentId], references: [id] )
   children    Category[] @relation("CategoryChildren")
+  categoryAttributes CategoryAttribute[]
   
 
 
   @@map("categories")
+}
+
+
+model CategoryAttribute {
+  id              String   @id @default(cuid())
+  categoryId      String
+  attributeName   String
+  attributeType   String   // text, number, select, color, boolean, range
+  filterType      String   // text_input, dropdown, checkbox, range_slider, color_swatch, toggle
+  options         String[] @default([])
+  units           String?
+  isRequired      Boolean  @default(false)
+  isFilterable    Boolean  @default(true)
+  placeholder     String?
+  sortOrder       Int      @default(0)
+  minValue        Float?
+  maxValue        Float?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("category_attributes")
 }
 
 model Wishlist {
