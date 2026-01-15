@@ -28,6 +28,10 @@ interface ManagedCategory {
   productCount: number
   parentId: string | null
   type: 'MAIN' | 'SUB'
+  parent?: {
+    id: string
+    name: string
+  } | null
 }
 
 interface CategoryAttribute {
@@ -95,17 +99,27 @@ function AddProductContent() {
         } else {
           console.error('Failed to fetch categories:', result.error)
           setManagedCategories([])
+          toast({
+            title: "Error",
+            description: "Failed to load categories",
+            variant: "destructive"
+          })
         }
       } catch (error) {
         console.error('Error fetching categories:', error)
         setManagedCategories([])
+        toast({
+          title: "Error",
+          description: "Failed to load categories. Please try again.",
+          variant: "destructive"
+        })
       } finally {
         setCategoriesLoading(false)
       }
     }
 
     fetchManagedCategories()
-  }, [])
+  }, [toast])
 
   // Fetch attributes when category changes
   useEffect(() => {
@@ -113,12 +127,24 @@ function AddProductContent() {
       if (!formData.category) {
         setCategoryAttributes([])
         setAttributeValues({})
+        setAttributesLoading(false)
         return
       }
 
       try {
         setAttributesLoading(true)
         const response = await fetch(`/api/categories/${formData.category}/attributes`)
+        
+        if (!response.ok) {
+          // If endpoint doesn't exist or returns 404, just return empty
+          if (response.status === 404) {
+            setCategoryAttributes([])
+            setAttributeValues({})
+            return
+          }
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
         const result = await response.json()
         
         if (result.success) {
@@ -128,10 +154,20 @@ function AddProductContent() {
           // Initialize attribute values
           const initialValues: Record<string, AttributeValue> = {}
           attributes.forEach((attr: CategoryAttribute) => {
+            // Set default value based on type
+            let defaultValue: any = ''
+            if (attr.attributeType === 'boolean') {
+              defaultValue = false
+            } else if (attr.attributeType === 'number' || attr.attributeType === 'range') {
+              defaultValue = attr.minValue || 0
+            } else if (attr.attributeType === 'select' && attr.options.length > 0) {
+              defaultValue = attr.options[0]
+            }
+            
             initialValues[attr.id] = {
               attributeId: attr.id,
               attributeName: attr.attributeName,
-              value: '',
+              value: defaultValue,
               type: attr.attributeType,
               units: attr.units
             }
@@ -198,7 +234,7 @@ function AddProductContent() {
     setCustomAttributes(prev => prev.filter((_, i) => i !== index))
   }
 
-  // File handling functions (keep your existing handleFileSelect, removeImage, etc.)
+  // File handling functions
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
@@ -313,7 +349,8 @@ function AddProductContent() {
     categoryAttributes.forEach(attr => {
       if (attr.isRequired) {
         const value = attributeValues[attr.id]?.value
-        if (!value || (typeof value === 'string' && value.trim() === '')) {
+        if (value === undefined || value === null || 
+            (typeof value === 'string' && value.trim() === '')) {
           errors.push(`${attr.attributeName} is required`)
         }
       }
@@ -324,6 +361,17 @@ function AddProductContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Basic validation
+    if (!formData.name || !formData.description || !formData.price || !formData.category || !formData.stock) {
+      toast({
+        title: "Missing required information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      setActiveTab("basic")
+      return
+    }
     
     // Validate required attributes
     const attributeErrors = validateAttributeValues()
@@ -337,6 +385,17 @@ function AddProductContent() {
       return
     }
     
+    // Validate images
+    if (images.length === 0) {
+      toast({
+        title: "Images required",
+        description: "Please upload at least one product image",
+        variant: "destructive",
+      })
+      setActiveTab("images")
+      return
+    }
+    
     setIsSubmitting(true)
 
     try {
@@ -346,20 +405,20 @@ function AddProductContent() {
       }
 
       const selectedCategory = managedCategories.find(cat => cat.id === formData.category)
-      let parentCategory = null
-      if (selectedCategory) {
-         if (selectedCategory.type === 'SUB' && selectedCategory.parentId) {
-          parentCategory = managedCategories.find(cat => cat.id === selectedCategory.parentId)
-        }
+      if (!selectedCategory) {
+        throw new Error("Selected category not found")
       }
-       
-      const categoryName = parentCategory 
-        ? `${parentCategory.name} - ${selectedCategory?.name}`
-        : selectedCategory?.name
+      
+      // Get category hierarchy name
+      let categoryName = selectedCategory.name
+      if (selectedCategory.type === 'SUB' && selectedCategory.parent) {
+        categoryName = `${selectedCategory.parent.name} - ${selectedCategory.name}`
+      }
 
       // Prepare attribute values
       const preparedAttributes = Object.values(attributeValues)
-        .filter(attr => attr.value !== '' && attr.value !== null && attr.value !== undefined)
+        .filter(attr => attr.value !== undefined && attr.value !== null && 
+                (typeof attr.value !== 'string' || attr.value.trim() !== ''))
         .map(attr => ({
           attributeId: attr.attributeId,
           attributeName: attr.attributeName,
@@ -378,12 +437,16 @@ function AddProductContent() {
         }))
 
       const productData = {
-        ...formData,
+        name: formData.name,
+        description: formData.description,
+        price: parseFloat(formData.price),
         category: categoryName,
         categoryId: formData.category,
-        images: imageUrls,
+        stock: parseInt(formData.stock),
         brand: formData.brand.trim() || undefined,
         material: formData.material.trim() || undefined,
+        featured: formData.featured,
+        images: imageUrls,
         attributes: [...preparedAttributes, ...preparedCustomAttributes]
       }
 
@@ -407,6 +470,7 @@ function AddProductContent() {
         variant: "default",
       })
 
+      // Cleanup image previews
       imagePreviews.forEach(preview => URL.revokeObjectURL(preview))
 
       router.push("/vendor/products")
@@ -423,10 +487,9 @@ function AddProductContent() {
     }
   }
 
-  const getCategoryHierarchyName = (category: ManagedCategory, categories: ManagedCategory[]): string => {
-    if (category.type === 'SUB' && category.parentId) {
-      const parent = categories.find(c => c.id === category.parentId)
-      return parent ? `${parent.name} - ${category.name}` : category.name
+  const getCategoryHierarchyName = (category: ManagedCategory): string => {
+    if (category.type === 'SUB' && category.parent) {
+      return `${category.parent.name} - ${category.name}`
     }
     return category.name
   }
@@ -478,6 +541,9 @@ function AddProductContent() {
                   placeholder={`Enter ${attribute.attributeName.toLowerCase()}`}
                   disabled={isSubmitting}
                   className="flex-1"
+                  min={attribute.minValue}
+                  max={attribute.maxValue}
+                  step="any"
                 />
                 {attribute.units && (
                   <div className="flex items-center px-3 border rounded-md bg-muted">
@@ -510,21 +576,23 @@ function AddProductContent() {
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2">
                   {attribute.options.map((color, idx) => (
-                    <div
+                    <button
                       key={idx}
+                      type="button"
                       className={`w-8 h-8 rounded-full border-2 cursor-pointer ${
-                        attrValue?.value === color ? 'border-primary' : 'border-transparent'
+                        attrValue?.value === color ? 'border-primary' : 'border-gray-300'
                       }`}
                       style={{ backgroundColor: color }}
                       onClick={() => updateAttributeValue(attribute.id, color)}
                       title={color}
+                      disabled={isSubmitting}
                     />
                   ))}
                 </div>
                 <Input
                   value={attrValue?.value || ''}
                   onChange={(e) => updateAttributeValue(attribute.id, e.target.value)}
-                  placeholder="Or enter custom color"
+                  placeholder="Or enter custom color (hex code)"
                   disabled={isSubmitting}
                 />
               </div>
@@ -533,11 +601,11 @@ function AddProductContent() {
             {attribute.attributeType === 'boolean' && (
               <div className="flex items-center space-x-2">
                 <Switch
-                  checked={attrValue?.value === 'Yes' || attrValue?.value === true}
-                  onCheckedChange={(checked) => updateAttributeValue(attribute.id, checked ? 'Yes' : 'No')}
+                  checked={attrValue?.value === true || attrValue?.value === 'true'}
+                  onCheckedChange={(checked) => updateAttributeValue(attribute.id, checked)}
                   disabled={isSubmitting}
                 />
-                <Label>{attrValue?.value === 'Yes' ? 'Yes' : 'No'}</Label>
+                <Label>{attrValue?.value ? 'Yes' : 'No'}</Label>
               </div>
             )}
             
@@ -551,6 +619,9 @@ function AddProductContent() {
                     placeholder={`Enter ${attribute.attributeName.toLowerCase()}`}
                     disabled={isSubmitting}
                     className="flex-1"
+                    min={attribute.minValue}
+                    max={attribute.maxValue}
+                    step="any"
                   />
                   {attribute.units && (
                     <span className="text-sm text-muted-foreground">{attribute.units}</span>
@@ -669,7 +740,7 @@ function AddProductContent() {
                             .filter(category => category.isActive)
                             .map((category) => (
                               <SelectItem key={category.id} value={category.id}>
-                                {getCategoryHierarchyName(category, managedCategories)}
+                                {getCategoryHierarchyName(category)}
                                 {category.type === 'SUB' && (
                                   <span className="text-xs text-muted-foreground ml-2">(Subcategory)</span>
                                 )}
@@ -766,20 +837,50 @@ function AddProductContent() {
                     </div>
                   ) : categoryAttributes.length === 0 ? (
                     <div className="text-center py-8 border-2 border-dashed rounded-lg">
-                      <p className="text-muted-foreground mb-4">
-                        {formData.category 
-                          ? "This category doesn't have any specifications defined."
-                          : "Select a category first to see specifications."
-                        }
-                      </p>
-                      {formData.category && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => router.push('/admin/categories')}
-                        >
-                          Contact Admin for Specifications
-                        </Button>
+                      {formData.category ? (
+                        <>
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                            <ChevronUp className="h-8 w-8 text-muted-foreground" />
+                          </div>
+                          <h3 className="text-lg font-medium mb-2">No Specifications Defined</h3>
+                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                            This category doesn't have any specifications defined yet. 
+                            You can still add custom specifications below if needed.
+                          </p>
+                          <div className="flex gap-3 justify-center">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => router.push('/admin/categories')}
+                            >
+                              View Categories
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="default"
+                              onClick={() => setActiveTab("basic")}
+                            >
+                              Continue Anyway
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                            <ChevronUp className="h-8 w-8 text-muted-foreground" />
+                          </div>
+                          <h3 className="text-lg font-medium mb-2">Select a Category First</h3>
+                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                            Please select a category from the Basic Info tab to see available specifications.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="default"
+                            onClick={() => setActiveTab("basic")}
+                          >
+                            Go to Basic Info
+                          </Button>
+                        </>
                       )}
                     </div>
                   ) : (
@@ -802,7 +903,7 @@ function AddProductContent() {
                           <div>
                             <h3 className="text-lg font-medium">Additional Specifications</h3>
                             <p className="text-sm text-muted-foreground">
-                              Add extra details not covered above
+                              Add extra details not covered above (optional)
                             </p>
                           </div>
                           <Button
