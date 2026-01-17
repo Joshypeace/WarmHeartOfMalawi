@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 // GET: Get attributes for a specific category
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+   context: { params: Promise< { id: string } > }
 ) {
   try {
     const session = await getServerSession()
@@ -18,7 +18,7 @@ export async function GET(
       )
     }
 
-    const { id } = params
+    const { id } = await context.params
     
     // Find the category and its attributes
     const category = await prisma.category.findUnique({
@@ -82,7 +82,7 @@ export async function GET(
 // POST: Create attributes for a category (bulk update)
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession()
@@ -95,7 +95,7 @@ export async function POST(
       )
     }
 
-    const { id } = params
+    const { id } = await context.params
     const data = await _request.json()
     
     // Verify category exists
