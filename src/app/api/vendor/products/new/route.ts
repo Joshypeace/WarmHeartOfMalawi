@@ -1,4 +1,3 @@
-// vendor/products/new/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { z } from "zod"
@@ -8,22 +7,30 @@ import { authOptions } from "@/lib/auth"
 const CreateProductSchema = z.object({
   name: z.string().min(1, "Product name is required").max(255, "Product name too long"),
   description: z.string().min(1, "Description is required").max(2000, "Description too long"),
-  price: z.string().transform(val => {
-    const parsed = parseFloat(val)
-    if (isNaN(parsed) || parsed < 0) {
-      throw new Error("Price must be a valid positive number")
-    }
-    return parsed
-  }),
+  price: z.preprocess(
+    (val) => {
+      if (val === "" || val === null || val === undefined) return null
+      if (typeof val === 'string') {
+        const parsed = parseFloat(val)
+        return isNaN(parsed) ? null : parsed
+      }
+      return val
+    },
+    z.number().positive("Price must be a positive number").min(0.01, "Price must be at least 0.01")
+  ),
   category: z.string().min(1, "Category name is required"),
   categoryId: z.string().min(1, "Category ID is required"),
-  stockCount: z.string().transform(val => {
-    const parsed = parseInt(val)
-    if (isNaN(parsed) || parsed < 0) {
-      throw new Error("Stock must be a valid non-negative number")
+  stockCount: z.preprocess(
+  (val) => {
+    if (val === "" || val === undefined || val === null) return 0
+    if (typeof val === "string") {
+      const parsed = parseInt(val, 10)
+      return isNaN(parsed) ? 0 : parsed
     }
-    return parsed
-  }),
+    return val
+  },
+  z.number().int().min(0, "Stock count must be a non-negative integer")
+),
   images: z.array(z.string()).max(10, "Maximum 10 images allowed").min(1, "At least one image is required"),
   brand: z.string().optional().nullable().default(null),
   size: z.string().optional().nullable().default(null),
@@ -85,11 +92,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Debug: Log what we're receiving
+    console.log("=== DEBUG: Incoming Request Data ===")
+    console.log("Full body:", JSON.stringify(body, null, 2))
+    console.log("Price field:", body.price, "Type:", typeof body.price)
+    console.log("StockCount field:", body.stockCount, "Type:", typeof body.stockCount)
+    console.log("=====================================")
+
     const validationResult = CreateProductSchema.safeParse(body)
     if (!validationResult.success) {
-      const errorMessages = validationResult.error.errors.map(err => err.message).join(", ")
+      console.error("=== DEBUG: Validation Errors ===")
+      validationResult.error.errors.forEach((err, index) => {
+        console.log(`Error ${index + 1}:`, {
+          path: err.path.join('.'),
+          message: err.message,
+          code: err.code,
+          
+        })
+      })
+      console.log("==================================")
+
+      const errorMessages = validationResult.error.errors.map(err => {
+        return `${err.path.join('.')}: ${err.message}`
+      }).join(", ")
+
       return NextResponse.json(
-        { error: `Validation failed: ${errorMessages}` },
+        { 
+          error: `Validation failed: ${errorMessages}`,
+          details: validationResult.error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message
+          }))
+        },
         { status: 400 }
       )
     }
@@ -109,7 +143,12 @@ export async function POST(request: NextRequest) {
       featured 
     } = validationResult.data
 
-    // Validate category exists and is active (can be either MAIN or SUB category)
+    console.log("=== DEBUG: Parsed Data ===")
+    console.log("Price (parsed):", price, "Type:", typeof price)
+    console.log("StockCount (parsed):", stockCount, "Type:", typeof stockCount)
+    console.log("============================")
+
+    // Validate category exists and is active
     const categoryExists = await prisma.category.findFirst({
       where: {
         id: categoryId,
@@ -132,10 +171,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For SUB categories, get the parent category name for the legacy category field
+    // For SUB categories, get the parent category name
     let finalCategoryName = categoryExists.name
     if (categoryExists.type === 'SUB' && categoryExists.parent) {
-      // Store both parent and child category names for clarity
       finalCategoryName = `${categoryExists.parent.name} - ${categoryExists.name}`
     }
 
@@ -153,7 +191,7 @@ export async function POST(request: NextRequest) {
 
     const validImages = Array.isArray(images) ? images.slice(0, 10) : []
 
-    // Create product WITHOUT reviews field (Prisma will handle defaults)
+    // Create product
     const product = await prisma.product.create({
       data: {
         name,
@@ -185,13 +223,11 @@ export async function POST(request: NextRequest) {
           select: {
             name: true
           }
-        },
-        // FIX: Remove categoryRef or check if it exists in your schema
-        categoryRef: true // Only include if it exists in your Prisma schema
+        }
       }
     })
 
-    // Get the category separately if needed
+    // Get the category separately for response
     const categoryWithParent = await prisma.category.findUnique({
       where: { id: categoryId },
       include: {
@@ -255,24 +291,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (error instanceof Error) {
-      if (error.message.includes("prisma") || error.message.includes("database")) {
-        return NextResponse.json(
-          { error: "Database error occurred while creating product" },
-          { status: 500 }
-        )
-      }
-      
-      if (error.message.includes("foreign key constraint") || error.message.includes("categoryId")) {
-        return NextResponse.json(
-          { error: "Invalid category selected. Please choose a valid category." },
-          { status: 400 }
-        )
-      }
-    }
-
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        error: "Internal server error",
+        details: error.message 
+      },
       { status: 500 }
     )
   }
