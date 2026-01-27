@@ -32,6 +32,7 @@ interface UseShopProductsProps {
   colors?: string[]
   materials?: string[]
   brands?: string[]
+  filters?: any // Add this for dynamic filters
 }
 
 interface ApiResponse {
@@ -66,7 +67,8 @@ export function useShopProducts({
   sizes = [],
   colors = [],
   materials = [],
-  brands = []
+  brands = [],
+  filters = {} // Add this
 }: UseShopProductsProps) {
   // Build query parameters
   const params = new URLSearchParams()
@@ -78,6 +80,28 @@ export function useShopProducts({
   if (colors.length > 0) params.append('colors', colors.join(','))
   if (materials.length > 0) params.append('materials', materials.join(','))
   if (brands.length > 0) params.append('brands', brands.join(','))
+  
+  // Add dynamic filters from ProductFilters component
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) {
+      if (key === 'priceRange') {
+        const [min, max] = value as [number, number]
+        if (min > 0) params.append('minPrice', min.toString())
+        if (max < 10000) params.append('maxPrice', max.toString())
+      } else if (Array.isArray(value) && value.length > 0) {
+        params.append(key, value.join(','))
+      } else if (typeof value === 'object' && value !== null) {
+        const v = value as { min?: number | string; max?: number | string }
+        if (v.min !== undefined && v.max !== undefined) {
+          params.append(key, `${v.min}-${v.max}`)
+        }
+      } else if (typeof value === 'boolean') {
+        params.append(key, value.toString())
+      } else if (value !== '') {
+        params.append(key, value.toString())
+      }
+    }
+  })
 
   const url = `/api/shop/products?${params.toString()}`
 
@@ -91,5 +115,6 @@ export function useShopProducts({
     products: data?.success ? data.data.products : [],
     loading: isLoading,
     error: error?.message || (data && !data.success ? data.error : null),
+    pagination: data?.success ? data.data.pagination : null
   }
 }
