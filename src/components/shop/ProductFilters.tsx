@@ -1,3 +1,4 @@
+// components/shop/ProductFilters.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -338,7 +339,7 @@ export default function ProductFilters({
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <Filter className="h-5 w-5" />
-            Filters
+            Advanced Filters
           </CardTitle>
           {hasActiveFilters && (
             <Button
