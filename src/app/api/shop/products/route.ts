@@ -9,13 +9,27 @@ export async function GET(request: NextRequest) {
     const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '12')))
     const search = searchParams.get('search') || ''
     const category = searchParams.get('category') || ''
-    const subCategory = searchParams.get('subCategory') || '' // ADDED: subCategory filter
+    const subCategory = searchParams.get('subCategory') || ''
     const sort = searchParams.get('sort') || 'featured'
     const featured = searchParams.get('featured')
     const sizes = searchParams.get('sizes')?.split(',').filter(Boolean) || []
     const colors = searchParams.get('colors')?.split(',').filter(Boolean) || []
     const materials = searchParams.get('materials')?.split(',').filter(Boolean) || []
     const brands = searchParams.get('brands')?.split(',').filter(Boolean) || []
+    
+    // Add support for dynamic filters from ProductFilters
+    const minPrice = searchParams.get('minPrice')
+    const maxPrice = searchParams.get('maxPrice')
+    
+    // Get all other dynamic filter parameters
+    const dynamicFilters: Record<string, string> = {}
+    searchParams.forEach((value, key) => {
+      // Skip known parameters
+      const knownParams = ['page', 'limit', 'search', 'category', 'subCategory', 'sort', 'featured', 'sizes', 'colors', 'materials', 'brands', 'minPrice', 'maxPrice']
+      if (!knownParams.includes(key) && value) {
+        dynamicFilters[key] = value
+      }
+    })
 
     const skip = (page - 1) * limit
 
@@ -41,14 +55,25 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Category filter - UPDATED: Handle both category and subcategory
+    // Category filter
     if (category && category !== 'all') {
       where.categoryId = category
     }
     
-    // Subcategory filter - NEW: Filter by subcategory ID
+    // Subcategory filter
     if (subCategory) {
       where.categoryId = subCategory
+    }
+
+    // Price range filter
+    if (minPrice || maxPrice) {
+      where.price = {}
+      if (minPrice) {
+        where.price.gte = parseInt(minPrice)
+      }
+      if (maxPrice) {
+        where.price.lte = parseInt(maxPrice)
+      }
     }
 
     // Size filter
@@ -70,6 +95,35 @@ export async function GET(request: NextRequest) {
     if (brands.length > 0) {
       where.brand = { in: brands }
     }
+
+    // Handle dynamic filters from ProductFilters
+    Object.entries(dynamicFilters).forEach(([key, value]) => {
+      // Parse array values (comma-separated)
+      if (value.includes(',')) {
+        const values = value.split(',').filter(Boolean)
+        if (values.length > 0) {
+          where[key] = { in: values }
+        }
+      } 
+      // Parse range values (min-max format)
+      else if (value.includes('-')) {
+        const [min, max] = value.split('-').map(v => v.trim())
+        if (!isNaN(parseFloat(min)) && !isNaN(parseFloat(max))) {
+          where[key] = {
+            gte: parseFloat(min),
+            lte: parseFloat(max)
+          }
+        }
+      }
+      // Parse boolean values
+      else if (value.toLowerCase() === 'true' || value.toLowerCase() === 'false') {
+        where[key] = value.toLowerCase() === 'true'
+      }
+      // Parse exact match for text fields
+      else {
+        where[key] = { contains: value, mode: 'insensitive' }
+      }
+    })
 
     // Build orderBy
     let orderBy: any = {}
