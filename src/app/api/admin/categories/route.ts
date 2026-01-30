@@ -5,6 +5,24 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { authOptions } from '@/lib/auth'
 
+// Schema for category attributes
+const CategoryAttributeSchema = z.object({
+  name: z.string().min(1).max(100),
+  attributeName: z.string().min(1).max(100).optional(),
+  type: z.enum(['text', 'number', 'select', 'color', 'boolean', 'range']),
+  attributeType: z.enum(['text', 'number', 'select', 'color', 'boolean', 'range']).optional(),
+  filterType: z.enum(['text_input', 'dropdown', 'checkbox', 'range_slider', 'color_swatch', 'toggle']),
+  options: z.array(z.string()).optional().default([]),
+  units: z.string().optional().nullable(),
+  isRequired: z.boolean().optional().default(false),
+  isFilterable: z.boolean().optional().default(true),
+  placeholder: z.string().optional().nullable(),
+  sortOrder: z.number().optional().default(0),
+  minValue: z.number().optional().nullable(),
+  maxValue: z.number().optional().nullable()
+})
+
+// Main category schema
 const CategorySchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional().nullable(),
@@ -13,12 +31,16 @@ const CategorySchema = z.object({
   isActive: z.boolean().optional().default(true),
   type: z.enum(['MAIN', 'SUB']).default('MAIN'),
   parentId: z.string().optional().nullable(),
-  level: z.number().min(1).max(2).default(1)
+  level: z.number().min(1).max(2).default(1),
+  attributes: z.array(CategoryAttributeSchema).optional().default([])
 })
 
 // GET - Fetch all categories with hierarchy
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const url = new URL(request.url)
+    const includeAttributes = url.searchParams.get('includeAttributes') === 'true'
+    
     const categories = await prisma.category.findMany({
       orderBy: [
         { level: 'asc' },
@@ -37,7 +59,12 @@ export async function GET() {
               select: {
                 products: true
               }
-            }
+            },
+            ...(includeAttributes ? {
+              categoryAttributes: {
+                orderBy: { sortOrder: 'asc' }
+              }
+            } : {})
           }
         },
         _count: {
@@ -45,11 +72,15 @@ export async function GET() {
             products: true,
             children: true
           }
-        }
+        },
+        ...(includeAttributes ? {
+          categoryAttributes: {
+            orderBy: { sortOrder: 'asc' }
+          }
+        } : {})
       }
     })
 
-    // Format categories with product counts
     const formattedCategories = categories.map(category => ({
       id: category.id,
       name: category.name,
@@ -71,10 +102,42 @@ export async function GET() {
         type: child.type,
         level: child.level,
         parentId: child.parentId,
-        productCount: child._count.products
+        productCount: child._count.products,
+        ...(includeAttributes && 'categoryAttributes' in child ? {
+          attributes: child.categoryAttributes?.map((attr: any) => ({
+            id: attr.id,
+            name: attr.attributeName,
+            type: attr.attributeType,
+            filterType: attr.filterType,
+            options: attr.options || [],
+            units: attr.units,
+            isRequired: attr.isRequired,
+            isFilterable: attr.isFilterable,
+            placeholder: attr.placeholder,
+            sortOrder: attr.sortOrder,
+            minValue: attr.minValue,
+            maxValue: attr.maxValue
+          })) || []
+        } : {})
       })),
       productCount: category._count.products,
       childrenCount: category._count.children,
+      ...(includeAttributes && 'categoryAttributes' in category ? {
+        attributes: category.categoryAttributes?.map((attr: any) => ({
+          id: attr.id,
+          name: attr.attributeName,
+          type: attr.attributeType,
+          filterType: attr.filterType,
+          options: attr.options || [],
+          units: attr.units,
+          isRequired: attr.isRequired,
+          isFilterable: attr.isFilterable,
+          placeholder: attr.placeholder,
+          sortOrder: attr.sortOrder,
+          minValue: attr.minValue,
+          maxValue: attr.maxValue
+        })) || []
+      } : {}),
       createdAt: category.createdAt,
       updatedAt: category.updatedAt
     }))
@@ -98,12 +161,11 @@ export async function GET() {
   }
 }
 
-// POST - Create new category (admin only)
+// POST - Create new category with attributes (admin only)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     
-    // Only admins can create categories
     if (!session?.user || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -121,10 +183,8 @@ export async function POST(request: NextRequest) {
 
     const validatedData = validationResult.data
     
-    // Generate slug if not provided
     const slug = validatedData.slug || validatedData.name.toLowerCase().replace(/\s+/g, '-')
     
-    // Check for duplicate name
     const nameConflict = await prisma.category.findUnique({
       where: { name: validatedData.name }
     })
@@ -136,7 +196,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check for duplicate slug
     const slugConflict = await prisma.category.findUnique({
       where: { slug }
     })
@@ -148,7 +207,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate parent for subcategories
     if (validatedData.type === 'SUB') {
       if (!validatedData.parentId) {
         return NextResponse.json(
@@ -157,7 +215,6 @@ export async function POST(request: NextRequest) {
         )
       }
       
-      // Verify parent exists and is a main category
       const parentCategory = await prisma.category.findUnique({
         where: { id: validatedData.parentId }
       })
@@ -177,6 +234,7 @@ export async function POST(request: NextRequest) {
       }
       
       validatedData.level = 2
+      validatedData.attributes = []
     } else {
       validatedData.level = 1
       validatedData.parentId = null
@@ -184,28 +242,87 @@ export async function POST(request: NextRequest) {
 
     const category = await prisma.category.create({
       data: {
-        ...validatedData,
-        slug
+        name: validatedData.name,
+        description: validatedData.description,
+        image: validatedData.image,
+        slug,
+        isActive: validatedData.isActive,
+        type: validatedData.type,
+        level: validatedData.level,
+        parentId: validatedData.parentId
       }
     })
+
+    if (validatedData.type === 'MAIN' && validatedData.attributes && validatedData.attributes.length > 0) {
+      await Promise.all(
+        validatedData.attributes.map((attr, index) => 
+          prisma.categoryAttribute.create({
+            data: {
+              categoryId: category.id,
+              attributeName: attr.attributeName || attr.name,
+              attributeType: attr.attributeType || attr.type,
+              filterType: attr.filterType,
+              options: attr.options || [],
+              units: attr.units || null,
+              isRequired: attr.isRequired || false,
+              isFilterable: attr.isFilterable !== false,
+              placeholder: attr.placeholder || null,
+              sortOrder: attr.sortOrder || index,
+              minValue: attr.minValue || null,
+              maxValue: attr.maxValue || null,
+              isActive: true
+            }
+          })
+        )
+      )
+    }
+
+    const createdCategory = await prisma.category.findUnique({
+      where: { id: category.id },
+      include: {
+        parent: true,
+        children: true,
+        categoryAttributes: {
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
+    })
+
+    const formattedCategory = {
+      id: createdCategory!.id,
+      name: createdCategory!.name,
+      description: createdCategory!.description,
+      image: createdCategory!.image,
+      slug: createdCategory!.slug,
+      isActive: createdCategory!.isActive,
+      type: createdCategory!.type,
+      level: createdCategory!.level,
+      parentId: createdCategory!.parentId,
+      parent: createdCategory!.parent,
+      children: createdCategory!.children,
+      attributes: createdCategory!.categoryAttributes.map(attr => ({
+        id: attr.id,
+        name: attr.attributeName,
+        type: attr.attributeType,
+        filterType: attr.filterType,
+        options: attr.options || [],
+        units: attr.units,
+        isRequired: attr.isRequired,
+        isFilterable: attr.isFilterable,
+        placeholder: attr.placeholder,
+        sortOrder: attr.sortOrder,
+        minValue: attr.minValue,
+        maxValue: attr.maxValue
+      })),
+      createdAt: createdCategory!.createdAt,
+      updatedAt: createdCategory!.updatedAt
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Category created successfully',
       data: { 
-        category: {
-          id: category.id,
-          name: category.name,
-          description: category.description,
-          image: category.image,
-          slug: category.slug,
-          isActive: category.isActive,
-          type: category.type,
-          level: category.level,
-          parentId: category.parentId,
-          createdAt: category.createdAt,
-          updatedAt: category.updatedAt
-        }
+        category: formattedCategory
       }
     })
 
