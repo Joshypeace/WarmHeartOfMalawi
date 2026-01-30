@@ -347,47 +347,48 @@ const handleSubmit = async (e: React.FormEvent) => {
     
     const method = editingCategory ? 'PUT' : 'POST'
 
-    // Prepare attributes data in correct format for backend
+    // Prepare attributes data in correct format
     const attributesData = formData.type === 'MAIN' ? attributes.map(attr => ({
-      attributeName: attr.name, // This is the key field the backend expects
-      attributeType: attr.type,
+      id: attr.id, // Include id for updates
+      name: attr.name,
+      type: attr.type,
+      attributeType: attr.type, // Both fields for compatibility
       filterType: attr.filterType,
       options: attr.options || [],
-      units: attr.units || undefined,
-      isRequired: attr.isRequired,
-      isFilterable: attr.isFilterable,
-      placeholder: attr.placeholder || undefined,
-      sortOrder: attr.sortOrder,
-      minValue: attr.minValue || undefined,
-      maxValue: attr.maxValue || undefined
+      units: attr.units || null, // Use null instead of undefined
+      isRequired: attr.isRequired || false,
+      isFilterable: attr.isFilterable !== false, // Ensure boolean
+      placeholder: attr.placeholder || null, // Use null instead of undefined
+      sortOrder: attr.sortOrder || 0,
+      minValue: attr.minValue || null, // Use null instead of undefined
+      maxValue: attr.maxValue || null // Use null instead of undefined
     })) : []
 
     const requestBody = {
       name: formData.name,
-      description: formData.description || "",
+      description: formData.description || null,
       image: imageUrl,
       slug: formData.name.toLowerCase().replace(/\s+/g, '-'),
       isActive: formData.isActive,
       type: formData.type,
-      parentId: formData.type === 'SUB' ? formData.parentId : undefined,
+      parentId: formData.type === 'SUB' ? formData.parentId : null,
       level: formData.level,
       attributes: attributesData // This will be empty array for SUB categories
     }
 
-    // Remove undefined/null values
-    const cleanedBody = Object.fromEntries(
-      Object.entries(requestBody).filter(([_, value]) => value !== undefined && value !== null)
-    )
+    console.log('DEBUG - Request body:', JSON.stringify(requestBody, null, 2))
+    console.log('DEBUG - Attributes data:', attributesData)
 
     const response = await fetch(url, {
       method,
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(cleanedBody)
+      body: JSON.stringify(requestBody)
     })
 
     const result = await response.json()
+    console.log('DEBUG - Response:', result)
 
     if (result.success) {
       toast({
@@ -410,8 +411,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   } finally {
     setSubmitting(false)
   }
-}
-  // Handle delete
+}  // Handle delete
   const handleDelete = async (categoryId: string) => {
     if (!confirm("Are you sure you want to delete this category? This will also delete all subcategories and products will lose their category association.")) {
       return
