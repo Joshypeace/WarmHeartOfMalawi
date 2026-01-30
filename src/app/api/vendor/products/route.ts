@@ -88,28 +88,33 @@ export async function GET(request: NextRequest): Promise<NextResponse<ErrorRespo
     });
 
     // Transform the data for frontend
-    const transformedProducts: ProductResponse[] = products.map(product => ({
-      id: product.id,
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      category: product.categoryRef?.name || product.category || "Uncategorized",
-      categoryId: product.categoryId,
-      categoryData: product.categoryRef ? {
-        id: product.categoryRef.id,
-        name: product.categoryRef.name,
-        type: product.categoryRef.type,
-        level: product.categoryRef.level,
-        parentId: product.categoryRef.parentId,
-        parentName: product.categoryRef.parent?.name
-      } : undefined,
-      images: product.images,
-      stockCount: product.stockCount,
-      inStock: product.inStock,
-      createdAt: product.createdAt.toISOString(),
-      updatedAt: product.updatedAt.toISOString(),
-      vendorId: product.vendorId,
-    }));
+    const transformedProducts: ProductResponse[] = products.map(product => {
+      // Ensure inStock is correctly calculated from stockCount
+      const inStock = product.stockCount > 0;
+      
+      return {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        category: product.categoryRef?.name || product.category || "Uncategorized",
+        categoryId: product.categoryId,
+        categoryData: product.categoryRef ? {
+          id: product.categoryRef.id,
+          name: product.categoryRef.name,
+          type: product.categoryRef.type,
+          level: product.categoryRef.level,
+          parentId: product.categoryRef.parentId,
+          parentName: product.categoryRef.parent?.name
+        } : undefined,
+        images: product.images,
+        stockCount: product.stockCount,
+        inStock: inStock, // Ensure this is calculated correctly
+        createdAt: product.createdAt.toISOString(),
+        updatedAt: product.updatedAt.toISOString(),
+        vendorId: product.vendorId,
+      };
+    });
 
     return NextResponse.json(transformedProducts);
 
