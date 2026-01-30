@@ -1,10 +1,27 @@
-// app/api/admin/categories/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { authOptions } from '@/lib/auth'
 
+// Schema for category attributes
+const CategoryAttributeSchema = z.object({
+  name: z.string().min(1).max(100),
+  attributeName: z.string().min(1).max(100).optional(),
+  type: z.enum(['text', 'number', 'select', 'color', 'boolean', 'range']),
+  attributeType: z.enum(['text', 'number', 'select', 'color', 'boolean', 'range']).optional(),
+  filterType: z.enum(['text_input', 'dropdown', 'checkbox', 'range_slider', 'color_swatch', 'toggle']),
+  options: z.array(z.string()).optional().default([]),
+  units: z.string().optional().nullable(),
+  isRequired: z.boolean().optional().default(false),
+  isFilterable: z.boolean().optional().default(true),
+  placeholder: z.string().optional().nullable(),
+  sortOrder: z.number().optional().default(0),
+  minValue: z.number().optional().nullable(),
+  maxValue: z.number().optional().nullable()
+})
+
+// Main category schema for update
 const UpdateCategorySchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional().nullable(),
@@ -13,46 +30,31 @@ const UpdateCategorySchema = z.object({
   isActive: z.boolean().optional(),
   type: z.enum(['MAIN', 'SUB']).optional(),
   parentId: z.string().optional().nullable(),
-  level: z.number().min(1).max(2).optional()
+  level: z.number().min(1).max(2).optional(),
+  attributes: z.array(CategoryAttributeSchema).optional()
 })
 
-// GET - Get single category with hierarchy
+// GET single category
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
     
-    // Allow any authenticated user to read categories
-    if (!session?.user) {
+    if (!session?.user || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await context.params
-
-    // For non-admin users, only allow access to active categories
-    const whereClause = session.user.role !== 'ADMIN' 
-      ? { id, isActive: true }
-      : { id }
+    const { id } = await params
 
     const category = await prisma.category.findUnique({
-      where: whereClause,
+      where: { id },
       include: {
-        parent: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        children: {
-          include: {
-            _count: {
-              select: {
-                products: true
-              }
-            }
-          }
+        parent: true,
+        children: true,
+        categoryAttributes: {
+          orderBy: { sortOrder: 'asc' }
         },
         _count: {
           select: {
@@ -70,37 +72,42 @@ export async function GET(
       )
     }
 
+    const formattedCategory = {
+      id: category.id,
+      name: category.name,
+      description: category.description,
+      image: category.image,
+      slug: category.slug,
+      isActive: category.isActive,
+      type: category.type,
+      level: category.level,
+      parentId: category.parentId,
+      parent: category.parent,
+      children: category.children,
+      productCount: category._count.products,
+      childrenCount: category._count.children,
+      attributes: category.categoryAttributes.map(attr => ({
+        id: attr.id,
+        name: attr.attributeName,
+        type: attr.attributeType,
+        filterType: attr.filterType,
+        options: attr.options || [],
+        units: attr.units,
+        isRequired: attr.isRequired,
+        isFilterable: attr.isFilterable,
+        placeholder: attr.placeholder,
+        sortOrder: attr.sortOrder,
+        minValue: attr.minValue,
+        maxValue: attr.maxValue
+      })),
+      createdAt: category.createdAt,
+      updatedAt: category.updatedAt
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        category: {
-          id: category.id,
-          name: category.name,
-          description: category.description,
-          image: category.image,
-          slug: category.slug,
-          isActive: category.isActive,
-          type: category.type,
-          level: category.level,
-          parentId: category.parentId,
-          parent: category.parent,
-          children: category.children.map(child => ({
-            id: child.id,
-            name: child.name,
-            description: child.description,
-            image: child.image,
-            slug: child.slug,
-            isActive: child.isActive,
-            type: child.type,
-            level: child.level,
-            parentId: child.parentId,
-            productCount: child._count.products
-          })),
-          productCount: category._count.products,
-          childrenCount: category._count.children,
-          createdAt: category.createdAt,
-          updatedAt: category.updatedAt
-        }
+        category: formattedCategory
       }
     })
 
@@ -113,20 +120,19 @@ export async function GET(
   }
 }
 
-// PUT - Update category (admin only)
+// PUT - Update category with attributes (admin only)
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
     
-    // Only admins can update categories
     if (!session?.user || session.user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await context.params
+    const { id } = await params
     const body = await request.json()
     const validationResult = UpdateCategorySchema.safeParse(body)
 
@@ -140,16 +146,11 @@ export async function PUT(
 
     const validatedData = validationResult.data
 
-    // Check if category exists
     const existingCategory = await prisma.category.findUnique({
       where: { id },
       include: {
-        _count: {
-          select: {
-            products: true,
-            children: true
-          }
-        }
+        categoryAttributes: true,
+        children: true
       }
     })
 
@@ -160,82 +161,82 @@ export async function PUT(
       )
     }
 
-    // Check if changing type from SUB to MAIN when there are children
-    if (validatedData.type === 'MAIN' && existingCategory.type === 'SUB' && existingCategory._count.children > 0) {
+    if (validatedData.type && validatedData.type !== existingCategory.type && existingCategory.children.length > 0) {
       return NextResponse.json(
-        { success: false, error: 'Cannot change subcategory to main category when it has children' },
+        { success: false, error: 'Cannot change category type when it has subcategories' },
         { status: 400 }
       )
     }
 
-    // Handle type changes
-    let updateData = { ...validatedData }
-    
-    if (validatedData.type) {
-      if (validatedData.type === 'MAIN') {
-        updateData.parentId = null
-        updateData.level = 1
-      } else if (validatedData.type === 'SUB') {
-        // Validate parent if changing to subcategory
-        if (!validatedData.parentId && !existingCategory.parentId) {
+    const type = validatedData.type || existingCategory.type
+
+    if (type === 'SUB') {
+      if (validatedData.parentId === undefined && existingCategory.type === 'MAIN') {
+        return NextResponse.json(
+          { success: false, error: 'Parent category is required for subcategories' },
+          { status: 400 }
+        )
+      }
+      
+      const parentId = validatedData.parentId || existingCategory.parentId
+      
+      if (parentId) {
+        const parentCategory = await prisma.category.findUnique({
+          where: { id: parentId }
+        })
+        
+        if (!parentCategory) {
           return NextResponse.json(
-            { success: false, error: 'Parent category is required for subcategories' },
-            { status: 400 }
+            { success: false, error: 'Parent category not found' },
+            { status: 404 }
           )
         }
         
-        const parentId = validatedData.parentId || existingCategory.parentId
-        if (parentId) {
-          const parentCategory = await prisma.category.findUnique({
-            where: { id: parentId }
-          })
-          
-          if (!parentCategory || parentCategory.type !== 'MAIN') {
-            return NextResponse.json(
-              { success: false, error: 'Invalid parent category' },
-              { status: 400 }
-            )
-          }
-          
-          if (parentId === id) {
-            return NextResponse.json(
-              { success: false, error: 'Category cannot be its own parent' },
-              { status: 400 }
-            )
-          }
-          
-          updateData.parentId = parentId
+        if (parentCategory.type !== 'MAIN') {
+          return NextResponse.json(
+            { success: false, error: 'Parent must be a main category' },
+            { status: 400 }
+          )
         }
-        updateData.level = 2
+      }
+      
+      validatedData.level = 2
+      validatedData.attributes = []
+    } else {
+      validatedData.level = 1
+      if (validatedData.parentId === undefined) {
+        validatedData.parentId = null
       }
     }
 
-    // Check if name is being changed and if it conflicts
     if (validatedData.name && validatedData.name !== existingCategory.name) {
-      const nameConflict = await prisma.category.findUnique({
-        where: { name: validatedData.name }
+      const nameConflict = await prisma.category.findFirst({
+        where: {
+          name: validatedData.name,
+          id: { not: id }
+        }
       })
 
-      if (nameConflict && nameConflict.id !== id) {
+      if (nameConflict) {
         return NextResponse.json(
           { success: false, error: 'Category with this name already exists' },
           { status: 400 }
         )
       }
-      
-      // Generate new slug if name changed
-      if (!validatedData.slug) {
-        updateData.slug = validatedData.name.toLowerCase().replace(/\s+/g, '-')
-      }
     }
 
-    // Check if slug is being changed and if it conflicts
-    if (validatedData.slug && validatedData.slug !== existingCategory.slug) {
-      const slugConflict = await prisma.category.findUnique({
-        where: { slug: validatedData.slug }
+    const name = validatedData.name || existingCategory.name
+    const slug = validatedData.slug || name.toLowerCase().replace(/\s+/g, '-')
+
+    if (slug !== existingCategory.slug) {
+      const slugConflict = await prisma.category.findFirst({
+        where: {
+          slug,
+          id: { not: id }
+        }
       })
 
-      if (slugConflict && slugConflict.id !== id) {
+      if (slugConflict) {
         return NextResponse.json(
           { success: false, error: 'Category with this slug already exists' },
           { status: 400 }
@@ -245,26 +246,94 @@ export async function PUT(
 
     const updatedCategory = await prisma.category.update({
       where: { id },
-      data: updateData
+      data: {
+        name: validatedData.name,
+        description: validatedData.description,
+        image: validatedData.image,
+        slug,
+        isActive: validatedData.isActive,
+        type: validatedData.type,
+        level: validatedData.level,
+        parentId: validatedData.parentId
+      }
     })
+
+    if (type === 'MAIN') {
+      await prisma.categoryAttribute.deleteMany({
+        where: { categoryId: id }
+      })
+
+      if (validatedData.attributes && validatedData.attributes.length > 0) {
+        await Promise.all(
+          validatedData.attributes.map((attr, index) => 
+            prisma.categoryAttribute.create({
+              data: {
+                categoryId: id,
+                attributeName: attr.attributeName || attr.name,
+                attributeType: attr.attributeType || attr.type,
+                filterType: attr.filterType,
+                options: attr.options || [],
+                units: attr.units || null,
+                isRequired: attr.isRequired || false,
+                isFilterable: attr.isFilterable !== false,
+                placeholder: attr.placeholder || null,
+                sortOrder: attr.sortOrder || index,
+                minValue: attr.minValue || null,
+                maxValue: attr.maxValue || null,
+                isActive: true
+              }
+            })
+          )
+        )
+      }
+    }
+
+    const finalCategory = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        parent: true,
+        children: true,
+        categoryAttributes: {
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
+    })
+
+    const formattedCategory = {
+      id: finalCategory!.id,
+      name: finalCategory!.name,
+      description: finalCategory!.description,
+      image: finalCategory!.image,
+      slug: finalCategory!.slug,
+      isActive: finalCategory!.isActive,
+      type: finalCategory!.type,
+      level: finalCategory!.level,
+      parentId: finalCategory!.parentId,
+      parent: finalCategory!.parent,
+      children: finalCategory!.children,
+      attributes: finalCategory!.categoryAttributes.map(attr => ({
+        id: attr.id,
+        name: attr.attributeName,
+        type: attr.attributeType,
+        filterType: attr.filterType,
+        options: attr.options || [],
+        units: attr.units,
+        isRequired: attr.isRequired,
+        isFilterable: attr.isFilterable,
+        placeholder: attr.placeholder,
+        sortOrder: attr.sortOrder,
+        minValue: attr.minValue,
+        maxValue: attr.maxValue
+      })),
+      createdAt: finalCategory!.createdAt,
+      updatedAt: finalCategory!.updatedAt
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Category updated successfully',
       data: { 
-        category: {
-          id: updatedCategory.id,
-          name: updatedCategory.name,
-          description: updatedCategory.description,
-          image: updatedCategory.image,
-          slug: updatedCategory.slug,
-          isActive: updatedCategory.isActive,
-          type: updatedCategory.type,
-          level: updatedCategory.level,
-          parentId: updatedCategory.parentId,
-          createdAt: updatedCategory.createdAt,
-          updatedAt: updatedCategory.updatedAt
-        }
+        category: formattedCategory
       }
     })
 
@@ -277,10 +346,10 @@ export async function PUT(
   }
 }
 
-// PATCH - Partial update (for status toggle) - Admin only
+// PATCH - Partial update (for status toggle)
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -289,14 +358,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await context.params
+    const { id } = await params
     const body = await request.json()
 
-    const category = await prisma.category.findUnique({
+    const existingCategory = await prisma.category.findUnique({
       where: { id }
     })
 
-    if (!category) {
+    if (!existingCategory) {
       return NextResponse.json(
         { success: false, error: 'Category not found' },
         { status: 404 }
@@ -312,23 +381,12 @@ export async function PATCH(
       success: true,
       message: 'Category updated successfully',
       data: { 
-        category: {
-          id: updatedCategory.id,
-          name: updatedCategory.name,
-          description: updatedCategory.description,
-          image: updatedCategory.image,
-          isActive: updatedCategory.isActive,
-          type: updatedCategory.type,
-          level: updatedCategory.level,
-          parentId: updatedCategory.parentId,
-          createdAt: updatedCategory.createdAt,
-          updatedAt: updatedCategory.updatedAt
-        }
+        category: updatedCategory
       }
     })
 
   } catch (error) {
-    console.error('Error updating category:', error)
+    console.error('Error patching category:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -336,10 +394,10 @@ export async function PATCH(
   }
 }
 
-// DELETE - Delete category - Admin only
+// DELETE - Delete category
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -348,7 +406,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await context.params
+    const { id } = await params
 
     const category = await prisma.category.findUnique({
       where: { id },
@@ -371,7 +429,7 @@ export async function DELETE(
 
     if (category._count.products > 0) {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete category with associated products' },
+        { success: false, error: 'Cannot delete category with products' },
         { status: 400 }
       )
     }
@@ -383,6 +441,12 @@ export async function DELETE(
       )
     }
 
+    // Delete attributes first
+    await prisma.categoryAttribute.deleteMany({
+      where: { categoryId: id }
+    })
+
+    // Delete category
     await prisma.category.delete({
       where: { id }
     })
