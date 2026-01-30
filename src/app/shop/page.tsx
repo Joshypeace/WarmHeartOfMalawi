@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, SlidersHorizontal, Star, Package, X, Tag, Palette, Ruler, Package2, Shield, Truck, ChevronDown, ChevronRight } from "lucide-react"
+import { Search, SlidersHorizontal, Star, Package, X, Tag, Palette, Ruler, Package2, Shield, Truck, ChevronDown, ChevronRight, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -97,18 +97,31 @@ export default function ShopPage() {
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   
-  // Use your existing hook - IMPORTANT: Use the original logic
+  // Filter states
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000])
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([])
+  const [selectedColors, setSelectedColors] = useState<string[]>([])
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([])
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([])
+
+  // Use shop products hook with filters
   const { products, loading, error } = useShopProducts({
     search: searchQuery,
     category: selectedCategory === "all" ? "" : selectedCategory,
     subCategory: selectedSubCategory || "",
-    sort: sortBy
+    sort: sortBy,
+    sizes: selectedSizes,
+    colors: selectedColors,
+    materials: selectedMaterials,
+    brands: selectedBrands,
+    // minPrice: priceRange[0] > 0 ? priceRange[0] : undefined,
+    // maxPrice: priceRange[1] < 10000 ? priceRange[1] : undefined,
   })
 
   const { addItem } = useCart()
   const { toast } = useToast()
 
-  // Fetch categories from admin/categories API (same as main categories page)
+  // Fetch categories from admin/categories API
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -191,7 +204,7 @@ export default function ShopPage() {
     fetchCategories()
   }, [toast])
 
-  // Handle category selection - SIMPLIFIED: Just set the category ID
+  // Handle category selection
   const handleCategorySelect = (categoryId: string, isSubCategory: boolean = false) => {
     if (isSubCategory) {
       setSelectedSubCategory(categoryId)
@@ -204,6 +217,12 @@ export default function ShopPage() {
       setSelectedCategory(categoryId)
       setSelectedSubCategory(null)
     }
+    // Reset filters when changing category
+    setPriceRange([0, 10000])
+    setSelectedSizes([])
+    setSelectedColors([])
+    setSelectedMaterials([])
+    setSelectedBrands([])
   }
 
   // Toggle category expansion in sidebar
@@ -231,11 +250,28 @@ export default function ShopPage() {
     setSearchQuery("")
     setSelectedCategory("all")
     setSelectedSubCategory(null)
+    setPriceRange([0, 10000])
+    setSelectedSizes([])
+    setSelectedColors([])
+    setSelectedMaterials([])
+    setSelectedBrands([])
     setExpandedCategories(new Set())
   }
 
   // Check if any filters are active
-  const hasActiveFilters = searchQuery || selectedCategory !== "all" || selectedSubCategory !== null
+  const hasActiveFilters = () => {
+    return (
+      searchQuery || 
+      selectedCategory !== "all" || 
+      selectedSubCategory !== null ||
+      priceRange[0] > 0 || 
+      priceRange[1] < 10000 ||
+      selectedSizes.length > 0 ||
+      selectedColors.length > 0 ||
+      selectedMaterials.length > 0 ||
+      selectedBrands.length > 0
+    )
+  }
 
   // Get selected category name for display
   const getSelectedCategoryName = (): string => {
@@ -331,6 +367,99 @@ export default function ShopPage() {
     return categories.reduce((sum, cat) => sum + cat.count, 0)
   }
 
+  // Extract unique values from products for filters
+  const getAllSizes = (): string[] => {
+    const allSizes = new Set<string>()
+    products.forEach(product => {
+      if (product.size) {
+        parseDetails(product.size).forEach(size => allSizes.add(size))
+      }
+    })
+    return Array.from(allSizes).sort()
+  }
+
+  const getAllColors = (): string[] => {
+    const allColors = new Set<string>()
+    products.forEach(product => {
+      if (product.color) {
+        parseDetails(product.color).forEach(color => allColors.add(color))
+      }
+    })
+    return Array.from(allColors).sort()
+  }
+
+  const getAllMaterials = (): string[] => {
+    const allMaterials = new Set<string>()
+    products.forEach(product => {
+      if (product.material) {
+        parseDetails(product.material).forEach(material => allMaterials.add(material))
+      }
+    })
+    return Array.from(allMaterials).sort()
+  }
+
+  const getAllBrands = (): string[] => {
+    const allBrands = new Set<string>()
+    products.forEach(product => {
+      if (product.brand) {
+        allBrands.add(product.brand)
+      }
+    })
+    return Array.from(allBrands).sort()
+  }
+
+  // Toggle filter values
+  const toggleSizeFilter = (size: string) => {
+    setSelectedSizes(prev => 
+      prev.includes(size) 
+        ? prev.filter(s => s !== size)
+        : [...prev, size]
+    )
+  }
+
+  const toggleColorFilter = (color: string) => {
+    setSelectedColors(prev => 
+      prev.includes(color) 
+        ? prev.filter(c => c !== color)
+        : [...prev, color]
+    )
+  }
+
+  const toggleMaterialFilter = (material: string) => {
+    setSelectedMaterials(prev => 
+      prev.includes(material) 
+        ? prev.filter(m => m !== material)
+        : [...prev, material]
+    )
+  }
+
+  const toggleBrandFilter = (brand: string) => {
+    setSelectedBrands(prev => 
+      prev.includes(brand) 
+        ? prev.filter(b => b !== brand)
+        : [...prev, brand]
+    )
+  }
+
+  // Debug function to check what's being sent to API
+  const debugAPI = () => {
+    console.log('API Parameters:', {
+      search: searchQuery,
+      category: selectedCategory === "all" ? "" : selectedCategory,
+      subCategory: selectedSubCategory || "",
+      sort: sortBy,
+      sizes: selectedSizes,
+      colors: selectedColors,
+      materials: selectedMaterials,
+      brands: selectedBrands,
+      minPrice: priceRange[0] > 0 ? priceRange[0] : undefined,
+      maxPrice: priceRange[1] < 10000 ? priceRange[1] : undefined,
+    })
+    console.log('Products from hook:', products)
+    console.log('Loading:', loading)
+    console.log('Error:', error)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-4 md:py-6 px-4 md:px-6 max-w-7xl mx-auto">
@@ -341,6 +470,13 @@ export default function ShopPage() {
             Discover authentic Malawian products from local artisans and vendors with complete details
           </p>
         </div>
+
+        {/* Debug button - remove in production */}
+        {process.env.NODE_ENV === 'development' && (
+          <Button onClick={debugAPI} variant="outline" size="sm" className="mb-4">
+            Debug API
+          </Button>
+        )}
 
         <div className="flex gap-6 relative">
           {/* Mobile Filter Toggle */}
@@ -357,7 +493,7 @@ export default function ShopPage() {
           {/* Left Sidebar - Filters */}
           <aside className={`
             fixed md:sticky top-0 left-0 h-screen md:h-auto z-40
-            w-64 md:w-72 flex-shrink-0 
+            w-72 md:w-80 flex-shrink-0 
             bg-background border-r md:border-r-0
             transition-transform duration-300 ease-in-out
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
@@ -506,6 +642,109 @@ export default function ShopPage() {
                 </div>
               </div>
 
+              {/* Price Filter */}
+              <div>
+                <h3 className="font-semibold mb-3 text-sm">Price Range (MWK)</h3>
+                <div className="space-y-4 px-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>MWK {priceRange[0]}</span>
+                    <span>MWK {priceRange[1]}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={priceRange[0]}
+                      onChange={(e) => setPriceRange([parseInt(e.target.value) || 0, priceRange[1]])}
+                      className="text-sm h-8"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={priceRange[1]}
+                      onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value) || 10000])}
+                      className="text-sm h-8"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Size Filter */}
+              {getAllSizes().length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 text-sm">Sizes</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {getAllSizes().map((size) => (
+                      <Badge
+                        key={size}
+                        variant={selectedSizes.includes(size) ? "default" : "outline"}
+                        className="cursor-pointer px-3 py-1"
+                        onClick={() => toggleSizeFilter(size)}
+                      >
+                        {size}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Color Filter */}
+              {getAllColors().length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 text-sm">Colors</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {getAllColors().map((color) => (
+                      <Badge
+                        key={color}
+                        variant={selectedColors.includes(color) ? "default" : "outline"}
+                        className="cursor-pointer px-3 py-1"
+                        onClick={() => toggleColorFilter(color)}
+                      >
+                        {color}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Material Filter */}
+              {getAllMaterials().length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 text-sm">Materials</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {getAllMaterials().map((material) => (
+                      <Badge
+                        key={material}
+                        variant={selectedMaterials.includes(material) ? "default" : "outline"}
+                        className="cursor-pointer px-3 py-1"
+                        onClick={() => toggleMaterialFilter(material)}
+                      >
+                        {material}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Brand Filter */}
+              {getAllBrands().length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 text-sm">Brands</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {getAllBrands().map((brand) => (
+                      <Badge
+                        key={brand}
+                        variant={selectedBrands.includes(brand) ? "default" : "outline"}
+                        className="cursor-pointer px-3 py-1"
+                        onClick={() => toggleBrandFilter(brand)}
+                      >
+                        {brand}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Sort By */}
               <div>
                 <h3 className="font-semibold mb-3 text-sm">Sort Products</h3>
@@ -525,7 +764,7 @@ export default function ShopPage() {
               </div>
 
               {/* Clear Filters Button */}
-              {hasActiveFilters && (
+              {hasActiveFilters() && (
                 <Button
                   variant="outline"
                   className="w-full h-9 text-sm"
@@ -560,7 +799,7 @@ export default function ShopPage() {
           {/* Main Content */}
           <main className="flex-1 min-w-0">
             {/* Active Filters */}
-            {hasActiveFilters && (
+            {hasActiveFilters() && (
               <div className="mb-4 flex flex-wrap gap-2">
                 {searchQuery && (
                   <Badge variant="secondary" className="flex items-center gap-1 px-3 py-1">
@@ -605,6 +844,56 @@ export default function ShopPage() {
                     </Badge>
                   </>
                 )}
+                {(priceRange[0] > 0 || priceRange[1] < 10000) && (
+                  <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
+                    <Filter className="h-3 w-3" />
+                    Price: MWK {priceRange[0]} - {priceRange[1]}
+                    <X 
+                      className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                      onClick={() => setPriceRange([0, 10000])}
+                    />
+                  </Badge>
+                )}
+                {selectedSizes.length > 0 && (
+                  <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
+                    <Filter className="h-3 w-3" />
+                    Sizes: {selectedSizes.join(', ')}
+                    <X 
+                      className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                      onClick={() => setSelectedSizes([])}
+                    />
+                  </Badge>
+                )}
+                {selectedColors.length > 0 && (
+                  <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
+                    <Filter className="h-3 w-3" />
+                    Colors: {selectedColors.join(', ')}
+                    <X 
+                      className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                      onClick={() => setSelectedColors([])}
+                    />
+                  </Badge>
+                )}
+                {selectedMaterials.length > 0 && (
+                  <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
+                    <Filter className="h-3 w-3" />
+                    Materials: {selectedMaterials.join(', ')}
+                    <X 
+                      className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                      onClick={() => setSelectedMaterials([])}
+                    />
+                  </Badge>
+                )}
+                {selectedBrands.length > 0 && (
+                  <Badge variant="outline" className="flex items-center gap-1 px-3 py-1">
+                    <Filter className="h-3 w-3" />
+                    Brands: {selectedBrands.join(', ')}
+                    <X 
+                      className="h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                      onClick={() => setSelectedBrands([])}
+                    />
+                  </Badge>
+                )}
               </div>
             )}
 
@@ -617,6 +906,11 @@ export default function ShopPage() {
                     : selectedCategory !== "all"
                     ? `${getSelectedCategoryName()} Products`
                     : "All Products"}
+                  {hasActiveFilters() && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      (Filtered)
+                    </span>
+                  )}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {loading ? (
@@ -902,15 +1196,15 @@ export default function ShopPage() {
                       <Package className="h-10 w-10 text-primary" />
                     </div>
                     <h3 className="text-xl font-semibold mb-3">
-                      {hasActiveFilters ? "No Products Found" : "No Products Available"}
+                      {hasActiveFilters() ? "No Products Found" : "No Products Available"}
                     </h3>
                     <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-                      {hasActiveFilters 
+                      {hasActiveFilters() 
                         ? "Try adjusting your filters or browse different categories to find what you're looking for."
                         : "We're preparing amazing products for you. Check back soon!"}
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      {hasActiveFilters && (
+                      {hasActiveFilters() && (
                         <Button variant="outline" onClick={clearFilters} className="sm:flex-1 max-sm:w-full">
                           Clear All Filters
                         </Button>
