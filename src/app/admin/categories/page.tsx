@@ -326,62 +326,91 @@ function CategoriesContent() {
   }
 
   // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
+  // Update the handleSubmit function in CategoriesContent component:
 
-    try {
-      let imageUrl = formData.imageUrl
+// Handle form submission
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setSubmitting(true)
 
-      // Upload new image if provided
-      if (formData.image) {
-        imageUrl = await uploadImage(formData.image)
-      }
+  try {
+    let imageUrl = formData.imageUrl
 
-      const url = editingCategory 
-        ? `/api/admin/categories/${editingCategory.id}`
-        : '/api/admin/categories'
-      
-      const method = editingCategory ? 'PUT' : 'POST'
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          image: imageUrl,
-          slug: formData.name.toLowerCase().replace(/\s+/g, '-'),
-          attributes: formData.type === 'MAIN' ? attributes : undefined // Only send for main categories
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: editingCategory ? "Category updated successfully" : "Category created successfully",
-        })
-        setIsDialogOpen(false)
-        resetForm()
-        fetchCategories()
-      } else {
-        throw new Error(result.error || 'Failed to save category')
-      }
-    } catch (error) {
-      console.error('Error saving category:', error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save category",
-        variant: "destructive"
-      })
-    } finally {
-      setSubmitting(false)
+    // Upload new image if provided
+    if (formData.image) {
+      imageUrl = await uploadImage(formData.image)
     }
-  }
 
+    const url = editingCategory 
+      ? `/api/admin/categories/${editingCategory.id}`
+      : '/api/admin/categories'
+    
+    const method = editingCategory ? 'PUT' : 'POST'
+
+    // Prepare attributes data in correct format for backend
+    const attributesData = formData.type === 'MAIN' ? attributes.map(attr => ({
+      attributeName: attr.name, // This is the key field the backend expects
+      attributeType: attr.type,
+      filterType: attr.filterType,
+      options: attr.options || [],
+      units: attr.units || undefined,
+      isRequired: attr.isRequired,
+      isFilterable: attr.isFilterable,
+      placeholder: attr.placeholder || undefined,
+      sortOrder: attr.sortOrder,
+      minValue: attr.minValue || undefined,
+      maxValue: attr.maxValue || undefined
+    })) : []
+
+    const requestBody = {
+      name: formData.name,
+      description: formData.description || "",
+      image: imageUrl,
+      slug: formData.name.toLowerCase().replace(/\s+/g, '-'),
+      isActive: formData.isActive,
+      type: formData.type,
+      parentId: formData.type === 'SUB' ? formData.parentId : undefined,
+      level: formData.level,
+      attributes: attributesData // This will be empty array for SUB categories
+    }
+
+    // Remove undefined/null values
+    const cleanedBody = Object.fromEntries(
+      Object.entries(requestBody).filter(([_, value]) => value !== undefined && value !== null)
+    )
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(cleanedBody)
+    })
+
+    const result = await response.json()
+
+    if (result.success) {
+      toast({
+        title: "Success",
+        description: editingCategory ? "Category updated successfully" : "Category created successfully",
+      })
+      setIsDialogOpen(false)
+      resetForm()
+      fetchCategories()
+    } else {
+      throw new Error(result.error || 'Failed to save category')
+    }
+  } catch (error) {
+    console.error('Error saving category:', error)
+    toast({
+      title: "Error",
+      description: error instanceof Error ? error.message : "Failed to save category",
+      variant: "destructive"
+    })
+  } finally {
+    setSubmitting(false)
+  }
+}
   // Handle delete
   const handleDelete = async (categoryId: string) => {
     if (!confirm("Are you sure you want to delete this category? This will also delete all subcategories and products will lose their category association.")) {
